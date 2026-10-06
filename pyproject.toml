@@ -25,6 +25,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
+    "dataclasses>=0.8 ; python_full_version < '3.7'",
     "typing-extensions>=4",
 ]
 

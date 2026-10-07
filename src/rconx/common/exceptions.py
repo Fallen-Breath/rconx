@@ -16,3 +16,11 @@ class RconPacketDecodeError(RconError, ValueError):
 
 class RconAuthenticationError(RconError):
 	pass
+
+
+class RconStateError(RconError):
+	pass
+
+
+class RconProtocolError(RconError):
+	pass

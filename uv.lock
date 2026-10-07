@@ -940,7 +940,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dataclasses", marker = "python_full_version < '3.7'", specifier = ">=0.8" },
-    { name = "typing-extensions", specifier = ">=4" },
+    { name = "typing-extensions", specifier = ">=4.1" },
 ]
 
 [package.metadata.requires-dev]

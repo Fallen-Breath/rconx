@@ -22,7 +22,7 @@ def test_decode_known_wire_format(data_type: Union[Type[bytes], Type[bytearray]]
 	assert Packet.decode_framed(data_type(bytes.fromhex('0d 00 00 00') + body)) == packet
 
 
-@pytest.mark.parametrize('payload', [b'', b'command', b'\x00\xff\x80\x00', '中文'.encode('utf-8')])
+@pytest.mark.parametrize('payload', [b'', b'command', b'\x00\xff\x80\x00', '中文'.encode('utf8')])
 @pytest.mark.parametrize('value', [-2 ** 31, 0, 2 ** 31 - 1])
 def test_round_trip(payload: bytes, value: int):
 	packet = Packet(value, value, payload)

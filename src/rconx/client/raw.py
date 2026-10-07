@@ -3,10 +3,13 @@ import dataclasses
 import socket
 from typing import Optional, cast
 
-from rconx.common.connection import AsyncConnection, Connection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
+from typing_extensions import Unpack
+
+from rconx.common.connection import AsyncConnection, Connection, ConnectionConfig
+from rconx.common.connection_options import ConnectionOptions
 from rconx.common.exceptions import RconConnectionError, RconTimeoutError
 from rconx.common.protocol import Packet
-from rconx.common.utils import validate_packet_size_limit, validate_timeout
+from rconx.common.utils import validate_timeout
 
 
 @dataclasses.dataclass(frozen=True)
@@ -19,23 +22,11 @@ class LocalAddress:
 class _RawRconClientConfig:
 	host: str
 	port: int
-	max_send_packet_size: Optional[int]
-	max_receive_packet_size: Optional[int]
-
-	def __post_init__(self):
-		validate_packet_size_limit(self.max_send_packet_size, 'max_send_packet_size')
-		validate_packet_size_limit(self.max_receive_packet_size, 'max_receive_packet_size')
+	connection_config: ConnectionConfig
 
 
 class RawRconClient:
-	def __init__(
-		self,
-		host: str,
-		port: int,
-		*,
-		max_send_packet_size: Optional[int] = None,
-		max_receive_packet_size: Optional[int] = DEFAULT_MAX_RECEIVE_PACKET_SIZE,
-	):
+	def __init__(self, host: str, port: int, **kwargs: Unpack[ConnectionOptions]):
 		"""
 		Configure the target address and packet size limits
 
@@ -44,7 +35,7 @@ class RawRconClient:
 		:keyword max_send_packet_size: Maximum sent packet size in bytes, including the length header. ``None`` disables the limit
 		:keyword max_receive_packet_size: Maximum received packet size in bytes, including the length header. ``None`` disables the limit; defaults to 4 MiB
 		"""
-		self.__config = _RawRconClientConfig(host, port, max_send_packet_size, max_receive_packet_size)
+		self.__config = _RawRconClientConfig(host, port, ConnectionConfig(**kwargs))
 		self.__connection: Optional[Connection] = None
 
 	def connect(self, *, timeout: Optional[float] = None, local_address: Optional[LocalAddress] = None):
@@ -74,8 +65,8 @@ class RawRconClient:
 			sock.settimeout(None)
 			self.__connection = Connection(
 				sock,
-				max_send_packet_size=self.__config.max_send_packet_size,
-				max_receive_packet_size=self.__config.max_receive_packet_size,
+				max_send_packet_size=self.__config.connection_config.max_send_packet_size,
+				max_receive_packet_size=self.__config.connection_config.max_receive_packet_size,
 			)
 		except OSError as err:
 			sock.close()
@@ -101,6 +92,18 @@ class RawRconClient:
 		:return: The received packet
 		"""
 		return self.__get_connection().receive_packet(timeout=timeout)
+
+	def try_receive_packet(self, *, first_byte_timeout: float, timeout: Optional[float] = None) -> Optional[Packet]:
+		"""
+		Receive a packet, allowing the first-byte wait to end without closing the connection
+
+		Once a packet starts, receive failures close the connection. Exhausting the total budget also closes it.
+
+		:keyword first_byte_timeout: Required finite non-negative first-byte waiting time in seconds; ``0`` checks immediately
+		:keyword timeout: Total receive budget in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:return: The received packet, or ``None`` if the first-byte wait expires while the total budget remains
+		"""
+		return self.__get_connection().try_receive_packet(first_byte_timeout=first_byte_timeout, timeout=timeout)
 
 	def close(self):
 		"""
@@ -130,14 +133,7 @@ class RawRconClient:
 
 
 class AsyncRawRconClient:
-	def __init__(
-		self,
-		host: str,
-		port: int,
-		*,
-		max_send_packet_size: Optional[int] = None,
-		max_receive_packet_size: Optional[int] = DEFAULT_MAX_RECEIVE_PACKET_SIZE,
-	):
+	def __init__(self, host: str, port: int, **kwargs: Unpack[ConnectionOptions]):
 		"""
 		Configure the target address and packet size limits
 
@@ -146,7 +142,7 @@ class AsyncRawRconClient:
 		:keyword max_send_packet_size: Maximum sent packet size in bytes, including the length header. ``None`` disables the limit
 		:keyword max_receive_packet_size: Maximum received packet size in bytes, including the length header. ``None`` disables the limit; defaults to 4 MiB
 		"""
-		self.__config = _RawRconClientConfig(host, port, max_send_packet_size, max_receive_packet_size)
+		self.__config = _RawRconClientConfig(host, port, ConnectionConfig(**kwargs))
 		self.__connection: Optional[AsyncConnection] = None
 
 	async def connect(self, *, local_address: Optional[LocalAddress] = None):
@@ -181,8 +177,8 @@ class AsyncRawRconClient:
 		else:
 			self.__connection = AsyncConnection(
 				reader, writer,
-				max_send_packet_size=self.__config.max_send_packet_size,
-				max_receive_packet_size=self.__config.max_receive_packet_size,
+				max_send_packet_size=self.__config.connection_config.max_send_packet_size,
+				max_receive_packet_size=self.__config.connection_config.max_receive_packet_size,
 			)
 
 	async def send_packet(self, packet: Packet):
@@ -200,6 +196,17 @@ class AsyncRawRconClient:
 		:return: The received packet
 		"""
 		return await self.__get_connection().receive_packet()
+
+	async def try_receive_packet(self, *, first_byte_timeout: float) -> Optional[Packet]:
+		"""
+		Receive a packet, allowing the first-byte wait to end without closing the connection
+
+		Receive failures and caller cancellation close the connection.
+
+		:keyword first_byte_timeout: Required finite non-negative first-byte waiting time in seconds; ``0`` checks immediately
+		:return: The received packet, or ``None`` if the first-byte wait expires before a packet starts
+		"""
+		return await self.__get_connection().try_receive_packet(first_byte_timeout=first_byte_timeout)
 
 	async def aclose(self):
 		"""

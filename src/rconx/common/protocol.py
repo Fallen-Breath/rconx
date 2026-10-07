@@ -1,5 +1,6 @@
 import dataclasses
 import struct
+from enum import IntEnum
 from typing import Union
 
 from rconx.common.exceptions import RconPacketDecodeError
@@ -10,6 +11,13 @@ _PACKET_HEADER = struct.Struct('<ii')
 _FRAMED_PACKET_HEADER = struct.Struct('<iii')
 _TERMINATOR = b'\x00\x00'
 MIN_PACKET_BODY_SIZE = _PACKET_HEADER.size + len(_TERMINATOR)
+
+
+class PacketType(IntEnum):
+	response_value = 0
+	exec_command = 2
+	auth_response = 2
+	auth = 3
 
 
 @dataclasses.dataclass(frozen=True)

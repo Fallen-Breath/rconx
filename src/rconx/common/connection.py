@@ -2,20 +2,23 @@ import asyncio
 import contextlib
 import dataclasses
 import socket
-from typing import Iterator, Optional, Union
+from typing import Generator, Optional, Union
 
+from typing_extensions import Unpack
+
+from rconx.common.connection_options import ConnectionOptions
 from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconTimeoutError
 from rconx.common.protocol import LENGTH_HEADER, MIN_PACKET_BODY_SIZE, Packet
-from rconx.common.utils import BytesBuffer, Deadline, validate_packet_size_limit
+from rconx.common.utils import BytesBuffer, Deadline, validate_packet_size_limit, validate_timeout
 
 DEFAULT_MAX_RECEIVE_PACKET_SIZE = 4 * 1024 * 1024
 _READ_CHUNK_SIZE = 64 * 1024
 
 
 @dataclasses.dataclass(frozen=True)
-class _ConnectionConfig:
-	max_send_packet_size: Optional[int]
-	max_receive_packet_size: Optional[int]
+class ConnectionConfig:
+	max_send_packet_size: Optional[int] = None
+	max_receive_packet_size: Optional[int] = DEFAULT_MAX_RECEIVE_PACKET_SIZE
 
 	def __post_init__(self):
 		validate_packet_size_limit(self.max_send_packet_size, 'max_send_packet_size')
@@ -23,8 +26,8 @@ class _ConnectionConfig:
 
 
 class __BaseConnection:
-	def __init__(self, *, max_send_packet_size: Optional[int], max_receive_packet_size: Optional[int]):
-		self.__config = _ConnectionConfig(max_send_packet_size, max_receive_packet_size)
+	def __init__(self, **kwargs: Unpack[ConnectionOptions]):
+		self.__config = ConnectionConfig(**kwargs)
 
 	def _encode_packet(self, packet: Packet) -> bytes:
 		data = packet.encode_framed()
@@ -45,14 +48,11 @@ class __BaseConnection:
 
 
 class Connection(__BaseConnection):
-	def __init__(
-		self,
-		sock: socket.socket,
-		*,
-		max_send_packet_size: Optional[int] = None,
-		max_receive_packet_size: Optional[int] = DEFAULT_MAX_RECEIVE_PACKET_SIZE,
-	):
-		super().__init__(max_send_packet_size=max_send_packet_size, max_receive_packet_size=max_receive_packet_size)
+	def __init__(self, sock: socket.socket, **kwargs: Unpack[ConnectionOptions]):
+		"""
+		**Not public API**
+		"""
+		super().__init__(**kwargs)
 		self.__socket: Optional[socket.socket] = sock
 
 	@property
@@ -92,12 +92,40 @@ class Connection(__BaseConnection):
 		deadline = Deadline(timeout)
 		sock = self.__get_socket()
 		with self.__close_on_error():
-			header = self.__read_exactly(sock, LENGTH_HEADER.size, deadline)
-			packet_size = self._decode_packet_size(header)
-			body = self.__read_exactly(sock, packet_size, deadline)
-			packet = Packet.decode(body)
-			deadline.get_remaining_or_raise()
-			return packet
+			return self.__receive_packet(sock, deadline)
+
+	def try_receive_packet(self, *, first_byte_timeout: float, timeout: Optional[float] = None) -> Optional[Packet]:
+		"""
+		Receive a packet, allowing the first-byte wait to end without closing the connection
+
+		Once a packet starts, receive failures close the connection. Exhausting the total budget also closes it.
+
+		:keyword first_byte_timeout: Required finite non-negative first-byte waiting time in seconds; ``0`` checks immediately
+		:keyword timeout: Total receive budget in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:return: The received packet, or ``None`` if the first-byte wait expires while the total budget remains
+		"""
+		if first_byte_timeout is None:
+			raise TypeError('first_byte_timeout must be a finite non-negative number; got None')
+		validate_timeout(first_byte_timeout, name='first_byte_timeout')
+		deadline = Deadline(timeout)
+		sock = self.__get_socket()
+
+		with self.__close_on_error():
+			remaining = deadline.get_remaining_or_raise()
+			wait_timeout = first_byte_timeout if remaining is None else min(first_byte_timeout, remaining)
+			try:
+				sock.settimeout(wait_timeout)
+				first_byte = sock.recv(1)
+			except (socket.timeout, BlockingIOError):
+				# An exhausted operation budget is a failure even when no packet has started.
+				deadline.get_remaining_or_raise()
+				return None
+			except OSError as err:
+				raise RconConnectionError('failed to read the first byte of a packet') from err
+
+			if not first_byte:
+				raise RconConnectionError('peer closed the connection while reading the first byte of a packet')
+			return self.__receive_packet(sock, deadline, first_byte)
 
 	def close(self):
 		"""
@@ -126,7 +154,7 @@ class Connection(__BaseConnection):
 		return self.__socket
 
 	@contextlib.contextmanager
-	def __close_on_error(self) -> Iterator[None]:
+	def __close_on_error(self) -> Generator[None, None, None]:
 		try:
 			yield
 		except BaseException:
@@ -134,19 +162,27 @@ class Connection(__BaseConnection):
 				self.close()
 			raise
 
+	def __receive_packet(self, sock: socket.socket, deadline: Deadline, header_prefix: bytes = b'') -> Packet:
+		header = header_prefix + self.__read_exactly(sock, LENGTH_HEADER.size - len(header_prefix), deadline, stage='packet length header')
+		packet_size = self._decode_packet_size(header)
+		body = self.__read_exactly(sock, packet_size, deadline, stage='packet body')
+		packet = Packet.decode(body)
+		deadline.get_remaining_or_raise()
+		return packet
+
 	@classmethod
-	def __read_exactly(cls, sock: socket.socket, size: int, deadline: Deadline) -> bytes:
+	def __read_exactly(cls, sock: socket.socket, size: int, deadline: Deadline, *, stage: str) -> bytes:
 		buffer = BytesBuffer()
 		while len(buffer) < size:
 			try:
 				sock.settimeout(deadline.get_remaining_or_raise())
 				data = sock.recv(min(size - len(buffer), _READ_CHUNK_SIZE))
 			except socket.timeout as err:
-				raise RconTimeoutError('packet receive timed out') from err
+				raise RconTimeoutError('timed out while reading {}'.format(stage)) from err
 			except OSError as err:
-				raise RconConnectionError('failed to receive packet') from err
+				raise RconConnectionError('failed to read {}'.format(stage)) from err
 			if not data:
-				raise RconConnectionError('peer closed the connection after {} of {} bytes'.format(len(buffer), size))
+				raise RconConnectionError('peer closed the connection while reading {}'.format(stage))
 			buffer.append(data)
 		return buffer.consume()
 
@@ -158,15 +194,11 @@ class _AsyncStream:
 
 
 class AsyncConnection(__BaseConnection):
-	def __init__(
-		self,
-		reader: asyncio.StreamReader,
-		writer: asyncio.StreamWriter,
-		*,
-		max_send_packet_size: Optional[int] = None,
-		max_receive_packet_size: Optional[int] = DEFAULT_MAX_RECEIVE_PACKET_SIZE,
-	):
-		super().__init__(max_send_packet_size=max_send_packet_size, max_receive_packet_size=max_receive_packet_size)
+	def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, **kwargs: Unpack[ConnectionOptions]):
+		"""
+		**Not public API**
+		"""
+		super().__init__(**kwargs)
 		self.__stream: Optional[_AsyncStream] = _AsyncStream(reader, writer)
 
 	@property
@@ -199,10 +231,38 @@ class AsyncConnection(__BaseConnection):
 		"""
 		stream = self.__get_stream()
 		with self.__close_on_error():
-			header = await self.__read_exactly(stream.reader, LENGTH_HEADER.size)
-			packet_size = self._decode_packet_size(header)
-			body = await self.__read_exactly(stream.reader, packet_size)
-			return Packet.decode(body)
+			return await self.__receive_packet(stream.reader)
+
+	async def try_receive_packet(self, *, first_byte_timeout: float) -> Optional[Packet]:
+		"""
+		Receive a packet, allowing the first-byte wait to end without closing the connection
+
+		Receive failures and caller cancellation close the connection.
+
+		:keyword first_byte_timeout: Required finite non-negative first-byte waiting time in seconds; ``0`` checks immediately
+		:return: The received packet, or ``None`` if the first-byte wait expires before a packet starts
+		"""
+		if first_byte_timeout is None:
+			raise TypeError('first_byte_timeout must be a finite non-negative number; got None')
+		validate_timeout(first_byte_timeout, name='first_byte_timeout')
+		stream = self.__get_stream()
+
+		with self.__close_on_error():
+			first_byte_read = asyncio.ensure_future(self.__read_exactly(stream.reader, 1, stage='the first byte of a packet'))
+			try:
+				await asyncio.wait([first_byte_read], timeout=first_byte_timeout)
+				if not first_byte_read.done():
+					first_byte_read.cancel()
+					# Wait for the cancelled read to finish before another receive can use the reader.
+					await asyncio.wait([first_byte_read])
+					return None
+				first_byte = first_byte_read.result()
+			finally:
+				first_byte_read.cancel()
+				with contextlib.suppress(BaseException):
+					await first_byte_read
+
+			return await self.__receive_packet(stream.reader, first_byte)
 
 	async def aclose(self):
 		"""
@@ -236,7 +296,7 @@ class AsyncConnection(__BaseConnection):
 		return self.__stream
 
 	@contextlib.contextmanager
-	def __close_on_error(self) -> Iterator[None]:
+	def __close_on_error(self) -> Generator[None, None, None]:
 		try:
 			yield
 		except BaseException:
@@ -251,14 +311,20 @@ class AsyncConnection(__BaseConnection):
 		with contextlib.suppress(BaseException):
 			stream.writer.transport.abort()
 
+	async def __receive_packet(self, reader: asyncio.StreamReader, header_prefix: bytes = b'') -> Packet:
+		header = header_prefix + await self.__read_exactly(reader, LENGTH_HEADER.size - len(header_prefix), stage='packet length header')
+		packet_size = self._decode_packet_size(header)
+		body = await self.__read_exactly(reader, packet_size, stage='packet body')
+		return Packet.decode(body)
+
 	@classmethod
-	async def __read_exactly(cls, reader: asyncio.StreamReader, size: int) -> bytes:
+	async def __read_exactly(cls, reader: asyncio.StreamReader, size: int, *, stage: str) -> bytes:
 		try:
 			return await reader.readexactly(size)
 		except asyncio.IncompleteReadError as err:
-			raise RconConnectionError('peer closed the connection after {} of {} bytes'.format(len(err.partial), size)) from err
+			raise RconConnectionError('peer closed the connection while reading {}'.format(stage)) from err
 		except OSError as err:
-			raise RconConnectionError('failed to receive packet') from err
+			raise RconConnectionError('failed to read {}'.format(stage)) from err
 
 	@classmethod
 	async def __wait_writer_closed(cls, writer: asyncio.StreamWriter):

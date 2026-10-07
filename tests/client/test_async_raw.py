@@ -10,6 +10,43 @@ from rconx.common.protocol import Packet
 from tests.support import RunAsync, SocketAddress, TcpListenerFactory, make_frame
 
 
+def test_first_byte_window_allows_reuse(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory):
+	async def scenario():
+		server = tcp_listener_factory()
+		async with AsyncRawRconClient(server.address.host, server.address.port) as client:
+			await client.connect()
+			peer = await server.accept_async()
+			assert await client.try_receive_packet(first_byte_timeout=0) is None
+			peer.writer.write(make_frame())
+			await peer.writer.drain()
+			assert await client.try_receive_packet(first_byte_timeout=1) == Packet(17, 2, b'hello')
+			await client.send_packet(Packet(20, 2, b'next'))
+			assert await peer.reader.readexactly(18) == make_frame(b'next', 20)
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('prefix_size', [0, 1, 8])
+def test_try_receive_failure_allows_reconnect(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, prefix_size: int):
+	async def scenario():
+		server = tcp_listener_factory()
+		async with AsyncRawRconClient(server.address.host, server.address.port) as client:
+			await client.connect()
+			first = await server.accept_async()
+			first.writer.write(make_frame()[:prefix_size])
+			await first.writer.drain()
+			first.writer.close()
+			with pytest.raises(RconConnectionError):
+				await client.try_receive_packet(first_byte_timeout=1)
+			await client.connect()
+			second = await server.accept_async()
+			second.writer.write(make_frame())
+			await second.writer.drain()
+			assert await client.receive_packet() == Packet(17, 2, b'hello')
+
+	run_async(scenario())
+
+
 @pytest.mark.parametrize('family', [socket.AF_INET, socket.AF_INET6], ids=['ipv4', 'ipv6'])
 def test_packet_exchange(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, family: int):
 	async def scenario():

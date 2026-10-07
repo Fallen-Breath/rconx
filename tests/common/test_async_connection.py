@@ -1,6 +1,6 @@
 import asyncio
 import struct
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
 import pytest
 
@@ -8,6 +8,95 @@ from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_
 from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError
 from rconx.common.protocol import Packet
 from tests.support import AsyncConnectionFactory, RunAsync, BasicMemoryWriter, FailingReader, MemoryWriter, make_frame
+
+
+@pytest.mark.parametrize('window', [0, 0.001])
+def test_first_byte_window_preserves_reader(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, window: float):
+	async def scenario():
+		endpoint = async_connection_factory()
+		for _ in range(2):
+			assert await endpoint.connection.try_receive_packet(first_byte_timeout=window) is None
+			assert not endpoint.connection.closed
+		endpoint.reader.feed_data(make_frame())
+		assert await endpoint.connection.receive_packet() == Packet(17, 2, b'hello')
+		endpoint.reader.feed_data(make_frame(b'next'))
+		assert await endpoint.connection.try_receive_packet(first_byte_timeout=0) == Packet(17, 2, b'next')
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('prefix_size', [0, 1, 3, 4, 8, 18])
+def test_try_receive_eof_closes(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, prefix_size: int):
+	async def scenario():
+		endpoint = async_connection_factory(make_frame()[:prefix_size])
+		endpoint.reader.feed_eof()
+		with pytest.raises(RconConnectionError):
+			await endpoint.connection.try_receive_packet(first_byte_timeout=0)
+		assert endpoint.connection.closed
+		assert endpoint.writer.released
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('prefix_size', [0, 1, 4, 8])
+def test_cancel_try_receive_closes(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, prefix_size: int):
+	async def scenario():
+		endpoint = async_connection_factory(make_frame()[:prefix_size])
+		task = asyncio.ensure_future(endpoint.connection.try_receive_packet(first_byte_timeout=10))
+		await endpoint.reader.pending.wait()
+		task.cancel()
+		with pytest.raises(asyncio.CancelledError):
+			await task
+		assert endpoint.connection.closed
+		assert endpoint.writer.released
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('window', [None, -1, float('inf'), float('nan')])
+def test_invalid_first_byte_window_preserves_connection(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, window: Any):
+	async def scenario():
+		endpoint = async_connection_factory(make_frame())
+		with pytest.raises((TypeError, ValueError)):
+			await endpoint.connection.try_receive_packet(first_byte_timeout=window)
+		assert await endpoint.connection.receive_packet() == Packet(17, 2, b'hello')
+
+	run_async(scenario())
+
+
+def test_first_byte_window_does_not_limit_packet_body(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory):
+	async def scenario():
+		endpoint = async_connection_factory(make_frame()[:1])
+		task = asyncio.ensure_future(endpoint.connection.try_receive_packet(first_byte_timeout=0))
+		await endpoint.reader.pending.wait()
+		await asyncio.sleep(0)
+		assert not task.done()
+		endpoint.reader.feed_data(make_frame()[1:])
+		assert await task == Packet(17, 2, b'hello')
+		assert not endpoint.connection.closed
+
+	run_async(scenario())
+
+
+def test_try_receive_network_error_closes(run_async: RunAsync):
+	async def scenario():
+		writer = MemoryWriter()
+		connection = AsyncConnection(cast(asyncio.StreamReader, FailingReader(OSError())), cast(asyncio.StreamWriter, writer))
+		with pytest.raises(RconConnectionError):
+			await connection.try_receive_packet(first_byte_timeout=1)
+		assert connection.closed and writer.released
+
+	run_async(scenario())
+
+
+def test_try_receive_checks_packet_size(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory):
+	async def scenario():
+		endpoint = async_connection_factory(make_frame(), max_receive_packet_size=18)
+		with pytest.raises(ValueError):
+			await endpoint.connection.try_receive_packet(first_byte_timeout=0)
+		assert endpoint.connection.closed
+
+	run_async(scenario())
 
 
 @pytest.mark.parametrize('chunk_size', [1, 3, 1460, 65536])

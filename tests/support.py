@@ -6,9 +6,13 @@ import struct
 from collections import deque
 from typing import Any, Callable, Coroutine, Deque, Iterable, List, NoReturn, Optional, Tuple, TypeVar, Union
 
-from typing_extensions import Protocol
+from typing_extensions import Protocol, SupportsIndex, Unpack
 
+from rconx.client.client import AsyncRconClient, RconClient
+from rconx.client.client_options import RconClientOptions
+from rconx.client.preset import RconPreset
 from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
+from rconx.common.protocol import Packet, PacketType
 
 _T = TypeVar('_T')
 SocketAddress = Union[Tuple[str, int], Tuple[str, int, int, int]]
@@ -27,6 +31,18 @@ def read_exactly(sock: socket.socket, size: int) -> bytes:
 		chunks.append(data)
 		size -= len(data)
 	return b''.join(chunks)
+
+
+def read_packet(sock: socket.socket) -> Packet:
+	header = read_exactly(sock, 4)
+	size = struct.unpack('<i', header)[0]
+	return Packet.decode_framed(header + read_exactly(sock, size))
+
+
+async def read_async_packet(reader: asyncio.StreamReader) -> Packet:
+	header = await reader.readexactly(4)
+	size = struct.unpack('<i', header)[0]
+	return Packet.decode_framed(header + await reader.readexactly(size))
 
 
 class Clock:
@@ -146,10 +162,29 @@ class FailingReader:
 		raise self.__error
 
 
+class PendingReader(asyncio.StreamReader):
+	def __init__(self):
+		super().__init__()
+		self.pending = asyncio.Event()
+		self.__available = 0
+
+	def feed_data(self, data: Iterable[SupportsIndex]):
+		payload = bytes(data)
+		super().feed_data(payload)
+		self.__available += len(payload)
+
+	async def readexactly(self, size: int) -> bytes:
+		if size > self.__available:
+			self.pending.set()
+		data = await super().readexactly(size)
+		self.__available -= len(data)
+		return data
+
+
 @dataclasses.dataclass
 class AsyncEndpoint:
 	connection: AsyncConnection
-	reader: asyncio.StreamReader
+	reader: PendingReader
 	writer: MemoryWriter
 
 
@@ -230,4 +265,172 @@ class TcpListenerFactory(Protocol):
 
 class RunAsync(Protocol):
 	def __call__(self, coroutine: Coroutine[Any, Any, _T]) -> _T:
+		...
+
+
+@dataclasses.dataclass(frozen=True)
+class PacketReply:
+	payload: bytes = b''
+	packet_type: int = PacketType.response_value
+	request_id: Optional[int] = None
+	id_offset: int = 0
+
+	def for_request(self, request: Packet) -> Packet:
+		request_id = request.request_id + self.id_offset if self.request_id is None else self.request_id
+		return Packet(request_id, self.packet_type, self.payload)
+
+
+class RconPeer:
+	def __init__(self, preset: RconPreset):
+		self.preset = preset
+		self.requests: List[Packet] = []
+		self.output = [b'first', b'second']
+		self.auth_replies = [PacketReply(packet_type=PacketType.auth_response)]
+		self.command_replies: Optional[List[PacketReply]] = None
+		self.probe_replies: Optional[List[PacketReply]] = None
+		self.result_before_ack = False
+		self.first_response_received = False
+		self.__command_id: Optional[int] = None
+		self.__received = bytearray()
+
+	def observe_receive(self, data: bytes):
+		self.__received.extend(data)
+		while len(self.__received) >= 4:
+			size = struct.unpack_from('<i', self.__received)[0] + 4
+			if len(self.__received) < size:
+				return
+			packet = Packet.decode_framed(self.__received[:size])
+			del self.__received[:size]
+			if packet.request_id == self.__command_id:
+				self.first_response_received = True
+
+	def respond(self, request: Packet) -> bytes:
+		self.requests.append(request)
+		if request.packet_type == PacketType.auth:
+			replies = self.auth_replies
+		elif request.packet_type == PacketType.exec_command:
+			self.__command_id = request.request_id
+			self.first_response_received = False
+			if self.command_replies is not None:
+				replies = self.command_replies
+			elif self.preset == RconPreset.cuberite:
+				replies = [PacketReply(packet_type=2), PacketReply(b''.join(self.output), 2)]
+				if self.result_before_ack:
+					replies.reverse()
+			elif self.preset == RconPreset.single_packet:
+				replies = [PacketReply(b''.join(self.output))]
+			else:
+				replies = [PacketReply(payload) for payload in self.output]
+		else:
+			assert request.packet_type == PacketType.response_value
+			assert request.payload == b''
+			assert request.request_id != self.__command_id
+			if self.preset == RconPreset.minecraft:
+				# Minecraft's probe is usable only after a complete command reply has been read.
+				assert self.first_response_received
+			else:
+				assert self.preset == RconPreset.srcds
+				assert not self.first_response_received
+			if self.probe_replies is not None:
+				replies = self.probe_replies
+			elif self.preset == RconPreset.srcds:
+				replies = [PacketReply(), PacketReply(b'arbitrary ending payload')]
+			else:
+				replies = [PacketReply(b'Unknown request 0')]
+
+		return b''.join(reply.for_request(request).encode_framed() for reply in replies)
+
+
+class RconSocket(MemorySocket):
+	def __init__(self, peer: RconPeer):
+		super().__init__()
+		self.peer = peer
+		self.on_close: Optional[Callable[[], None]] = None
+
+	def setsockopt(self, level: int, option: int, value: int):
+		pass
+
+	def sendall(self, data: bytes):
+		super().sendall(data)
+		response = self.peer.respond(Packet.decode_framed(data))
+		if response:
+			self.chunks.append(response)
+
+	def recv(self, size: int) -> bytes:
+		if not self.closed and not self.chunks:
+			raise socket.timeout('no reply available')
+		data = super().recv(size)
+		self.peer.observe_receive(data)
+		return data
+
+	def close(self):
+		super().close()
+		if self.on_close is not None:
+			self.on_close()
+
+
+class RconReader(PendingReader):
+	def __init__(self, peer: RconPeer):
+		super().__init__()
+		self.peer = peer
+
+	async def readexactly(self, size: int) -> bytes:
+		data = await super().readexactly(size)
+		self.peer.observe_receive(data)
+		return data
+
+
+class RconWriter(MemoryWriter):
+	def __init__(self, peer: RconPeer, reader: RconReader):
+		super().__init__()
+		self.peer = peer
+		self.reader = reader
+
+	def get_extra_info(self, name: str) -> Any:
+		return self if name == 'socket' else None
+
+	def setsockopt(self, level: int, option: int, value: int):
+		pass
+
+	def write(self, data: bytes):
+		super().write(data)
+		response = self.peer.respond(Packet.decode_framed(data))
+		if response:
+			self.reader.feed_data(response)
+
+
+@dataclasses.dataclass
+class SyncRconEndpoint:
+	client: RconClient
+	peer: RconPeer
+	sockets: List[RconSocket] = dataclasses.field(default_factory=list)
+
+	@property
+	def socket(self) -> RconSocket:
+		return self.sockets[-1]
+
+
+@dataclasses.dataclass
+class AsyncRconEndpoint:
+	client: AsyncRconClient
+	peer: RconPeer
+	readers: List[RconReader] = dataclasses.field(default_factory=list)
+	writers: List[RconWriter] = dataclasses.field(default_factory=list)
+
+	@property
+	def reader(self) -> RconReader:
+		return self.readers[-1]
+
+	@property
+	def writer(self) -> RconWriter:
+		return self.writers[-1]
+
+
+class SyncRconFactory(Protocol):
+	def __call__(self, preset: RconPreset = RconPreset.single_packet, *, first_byte_timeout: Optional[float] = 0, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
+		...
+
+
+class AsyncRconFactory(Protocol):
+	def __call__(self, preset: RconPreset = RconPreset.single_packet, *, first_byte_timeout: Optional[float] = 0, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
 		...

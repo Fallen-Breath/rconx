@@ -10,6 +10,82 @@ from rconx.common.protocol import Packet
 from tests.support import Clock, MemorySocket, SocketFactory, make_frame
 
 
+@pytest.mark.parametrize('window', [0, 0.5])
+@pytest.mark.parametrize('error', [socket.timeout(), BlockingIOError()])
+def test_first_byte_window_preserves_connection(socket_factory: SocketFactory, window: float, error: BaseException):
+	sock = socket_factory([error, make_frame()])
+	connection = Connection(cast(socket.socket, sock))
+	assert connection.try_receive_packet(first_byte_timeout=window, timeout=1) is None
+	assert not connection.closed
+	assert connection.receive_packet(timeout=1) == Packet(17, 2, b'hello')
+
+
+@pytest.mark.parametrize('chunk_size', [1, 3, 19])
+def test_try_receive_complete_packet(socket_factory: SocketFactory, chunk_size: int):
+	frame = make_frame()
+	connection = Connection(cast(socket.socket, socket_factory(frame[index:index + chunk_size] for index in range(0, len(frame), chunk_size))))
+	assert connection.try_receive_packet(first_byte_timeout=0) == Packet(17, 2, b'hello')
+	assert not connection.closed
+
+
+@pytest.mark.parametrize('prefix_size', [0, 1, 3, 4, 8, 18])
+@pytest.mark.parametrize('error, expected', [
+	pytest.param(socket.timeout(), RconTimeoutError, id='timeout'),
+	pytest.param(OSError(), RconConnectionError, id='network-error'),
+	pytest.param(b'', RconConnectionError, id='eof'),
+])
+def test_try_receive_failure_closes(socket_factory: SocketFactory, prefix_size: int, error: Any, expected: Type[BaseException]):
+	chunks = [make_frame()[:prefix_size], error] if prefix_size else [error]
+	connection = Connection(cast(socket.socket, socket_factory(chunks)))
+	if prefix_size == 0 and isinstance(error, socket.timeout):
+		assert connection.try_receive_packet(first_byte_timeout=0.1) is None
+		assert not connection.closed
+	else:
+		with pytest.raises(expected):
+			connection.try_receive_packet(first_byte_timeout=0.1)
+		assert connection.closed
+
+
+@pytest.mark.parametrize('window', [None, -1, float('inf'), float('nan')])
+def test_invalid_first_byte_window_preserves_connection(socket_factory: SocketFactory, window: Any):
+	connection = Connection(cast(socket.socket, socket_factory([make_frame()])))
+	with pytest.raises((TypeError, ValueError)):
+		connection.try_receive_packet(first_byte_timeout=window)
+	assert connection.receive_packet() == Packet(17, 2, b'hello')
+
+
+def test_first_byte_window_does_not_limit_packet_body(socket_factory: SocketFactory, clock: Clock):
+	sock = socket_factory([make_frame()])
+	reads = 0
+
+	def receive(sock: MemorySocket):
+		nonlocal reads
+		reads += 1
+		if reads > 1:
+			clock.advance(0.2)
+
+	sock.on_receive = receive
+	connection = Connection(cast(socket.socket, sock))
+	assert connection.try_receive_packet(first_byte_timeout=0.1, timeout=1) == Packet(17, 2, b'hello')
+
+
+@pytest.mark.parametrize('budget', [0, 0.5])
+def test_try_receive_total_budget_closes(socket_factory: SocketFactory, clock: Clock, budget: float):
+	sock = socket_factory([socket.timeout()])
+	sock.on_receive = lambda sock: clock.advance(budget)
+	connection = Connection(cast(socket.socket, sock))
+	with pytest.raises(RconTimeoutError):
+		connection.try_receive_packet(first_byte_timeout=1, timeout=budget)
+	assert connection.closed
+
+
+def test_try_receive_checks_packet_size(socket_factory: SocketFactory):
+	connection = Connection(cast(socket.socket, socket_factory([make_frame()])), max_receive_packet_size=18)
+	with pytest.raises(ValueError):
+		connection.try_receive_packet(first_byte_timeout=0)
+	assert connection.closed
+
+
 @pytest.mark.parametrize('chunk_size', [1, 3, 1460, 65536])
 def test_receive_fragmented_packet(socket_factory: SocketFactory, chunk_size: int):
 	payload = bytes(range(256)) * 513

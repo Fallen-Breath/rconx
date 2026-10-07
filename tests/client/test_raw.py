@@ -9,6 +9,34 @@ from rconx.common.protocol import Packet
 from tests.support import SocketAddress, TcpListenerFactory, make_frame, read_exactly
 
 
+def test_first_byte_window_allows_reuse(tcp_listener_factory: TcpListenerFactory):
+	server = tcp_listener_factory()
+	with RawRconClient(server.address.host, server.address.port) as client:
+		client.connect(timeout=1)
+		peer = server.accept()
+		assert client.try_receive_packet(first_byte_timeout=0, timeout=1) is None
+		peer.sendall(make_frame())
+		assert client.try_receive_packet(first_byte_timeout=1, timeout=1) == Packet(17, 2, b'hello')
+		client.send_packet(Packet(20, 2, b'next'), timeout=1)
+		assert read_exactly(peer, 18) == make_frame(b'next', 20)
+
+
+@pytest.mark.parametrize('prefix_size', [0, 1, 8])
+def test_try_receive_failure_allows_reconnect(tcp_listener_factory: TcpListenerFactory, prefix_size: int):
+	server = tcp_listener_factory()
+	with RawRconClient(server.address.host, server.address.port) as client:
+		client.connect(timeout=1)
+		first = server.accept()
+		first.sendall(make_frame()[:prefix_size])
+		first.shutdown(socket.SHUT_WR)
+		with pytest.raises(RconConnectionError):
+			client.try_receive_packet(first_byte_timeout=1, timeout=1)
+		client.connect(timeout=1)
+		second = server.accept()
+		second.sendall(make_frame())
+		assert client.receive_packet(timeout=1) == Packet(17, 2, b'hello')
+
+
 @pytest.mark.parametrize('family', [socket.AF_INET, socket.AF_INET6], ids=['ipv4', 'ipv6'])
 def test_packet_exchange(tcp_listener_factory: TcpListenerFactory, family: int):
 	server = tcp_listener_factory(family)

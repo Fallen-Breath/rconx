@@ -6,7 +6,7 @@ from typing import Any, Callable, Coroutine, Generator, Iterable, List, Optional
 import pytest
 
 from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
-from tests.support import AsyncConnectionFactory, AsyncEndpoint, Clock, MemorySocket, MemoryWriter, RunAsync, SocketFactory, TcpListener, TcpListenerFactory
+from tests.support import AsyncConnectionFactory, AsyncEndpoint, Clock, MemorySocket, MemoryWriter, PendingReader, RunAsync, SocketFactory, TcpListener, TcpListenerFactory
 
 _T = TypeVar('_T')
 
@@ -61,7 +61,7 @@ def async_connection_factory(run_async: RunAsync) -> Generator[AsyncConnectionFa
 	connections: List[AsyncConnection] = []
 
 	def create(data: bytes = b'', *, max_send_packet_size: Optional[int] = None, max_receive_packet_size: Optional[int] = DEFAULT_MAX_RECEIVE_PACKET_SIZE) -> AsyncEndpoint:
-		reader = asyncio.StreamReader()
+		reader = PendingReader()
 		reader.feed_data(data)
 		writer = MemoryWriter()
 		connection = AsyncConnection(reader, cast(asyncio.StreamWriter, writer), max_send_packet_size=max_send_packet_size, max_receive_packet_size=max_receive_packet_size)

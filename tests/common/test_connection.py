@@ -1,5 +1,6 @@
 import socket
 import struct
+import threading
 from typing import Any, Optional, Type, cast
 
 import pytest
@@ -7,7 +8,7 @@ import pytest
 from rconx.common.connection import Connection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
 from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconTimeoutError
 from rconx.common.protocol import Packet
-from tests.support import Clock, MemorySocket, SocketFactory, make_frame
+from tests.support import Clock, MemorySocket, SocketFactory, TcpListenerFactory, ThreadCall, fill_socket_send_buffer, make_frame
 
 
 @pytest.mark.parametrize('window', [0, 0.5])
@@ -294,3 +295,34 @@ def test_context_closes_connection(socket_factory: SocketFactory, body_error: bo
 	connection.close()
 	with pytest.raises(RconConnectionError):
 		connection.send_packet(Packet(17, 2, b'hello'))
+
+
+@pytest.mark.parametrize('send', [False, True], ids=['blocked-receive', 'blocked-send'])
+def test_close_interrupts_socket_io(tcp_listener_factory: TcpListenerFactory, send: bool):
+	listener = tcp_listener_factory()
+	with socket.create_connection((listener.address.host, listener.address.port), timeout=2) as peer:
+		peer.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
+		sock = listener.accept()
+		sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4096)
+		if send:
+			fill_socket_send_buffer(sock)
+		connection = Connection(sock)
+		entered = threading.Event()
+		def operation():
+			entered.set()
+			with pytest.raises(RconConnectionError):
+				if send:
+					connection.send_packet(Packet(1, 2, b'x' * (4 * 1024 * 1024)))
+				else:
+					connection.receive_packet()
+		worker = ThreadCall(operation)
+		try:
+			assert entered.wait(2)
+			assert not worker.done.wait(0.1)
+			connection.close()
+			worker.join()
+			assert connection.closed
+		finally:
+			connection.close()
+			peer.close()
+			worker.join()

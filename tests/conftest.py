@@ -57,7 +57,12 @@ def run_async() -> Generator[RunAsync, None, None]:
 
 
 @pytest.fixture
-def async_connection_factory(run_async: RunAsync) -> Generator[AsyncConnectionFactory, None, None]:
+def memory_writer_support(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.setattr('rconx.common.connection._HAS_WAIT_CLOSED', True)
+
+
+@pytest.fixture
+def async_connection_factory(run_async: RunAsync, memory_writer_support: None) -> Generator[AsyncConnectionFactory, None, None]:
 	connections: List[AsyncConnection] = []
 
 	def create(data: bytes = b'', *, max_send_packet_size: Optional[int] = None, max_receive_packet_size: Optional[int] = DEFAULT_MAX_RECEIVE_PACKET_SIZE) -> AsyncEndpoint:

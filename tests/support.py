@@ -1,10 +1,12 @@
 import asyncio
 import contextlib
 import dataclasses
+import select
 import socket
 import struct
+import threading
 from collections import deque
-from typing import Any, Callable, Coroutine, Deque, Iterable, List, NoReturn, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Coroutine, Deque, Iterable, List, NoReturn, Optional, Tuple, TypeVar, Union, cast
 
 from typing_extensions import Protocol, SupportsIndex, Unpack
 
@@ -43,6 +45,39 @@ async def read_async_packet(reader: asyncio.StreamReader) -> Packet:
 	header = await reader.readexactly(4)
 	size = struct.unpack('<i', header)[0]
 	return Packet.decode_framed(header + await reader.readexactly(size))
+
+
+def fill_socket_send_buffer(sock: socket.socket):
+	sock.setblocking(False)
+	try:
+		chunk = b'x' * (64 * 1024)
+		for _ in range(512):
+			try:
+				sock.send(chunk)
+			except BlockingIOError:
+				if not select.select([], [sock], [], 0.1)[1]:
+					return
+		raise AssertionError('could not establish socket send backpressure')
+	finally:
+		sock.setblocking(True)
+
+
+async def buffer_stream_output(writer: asyncio.StreamWriter) -> int:
+	transport = writer.transport
+	# Keep drain() usable while preparing a completed send with pending output.
+	transport.set_write_buffer_limits(high=64 * 1024 * 1024)
+	chunk = b'x' * (64 * 1024)
+	total = 0
+	for _ in range(512):
+		writer.write(chunk)
+		total += len(chunk)
+		await asyncio.sleep(0)
+		buffered = transport.get_write_buffer_size()
+		if buffered:
+			await asyncio.sleep(0.05)
+			if transport.get_write_buffer_size() >= buffered:
+				return total
+	raise AssertionError('could not establish stream send backpressure')
 
 
 class Clock:
@@ -93,6 +128,9 @@ class MemorySocket:
 			raise self.send_error
 		self.sent.extend(data)
 
+	def shutdown(self, how: int):
+		pass
+
 	def close(self):
 		self.closed = True
 		if self.close_error is not None:
@@ -109,6 +147,9 @@ class MemoryTransport:
 		self.__writer.released = True
 		if self.abort_error is not None:
 			raise self.abort_error
+
+	def set_write_buffer_limits(self, high: Optional[int] = None, low: Optional[int] = None):
+		pass
 
 
 class BasicMemoryWriter:
@@ -245,6 +286,30 @@ class TcpListener:
 			sock.close()
 
 
+@dataclasses.dataclass
+class AsyncConnectionPair:
+	connection: AsyncConnection
+	writer: asyncio.StreamWriter
+	peer: AsyncPeer
+
+	async def aclose(self):
+		self.connection.abort()
+		self.peer.writer.close()
+		wait_closed = getattr(self.peer.writer, 'wait_closed', None)
+		if wait_closed is not None:
+			await wait_closed()
+		await asyncio.sleep(0)
+
+
+async def open_async_connection_pair(listener: TcpListener) -> AsyncConnectionPair:
+	listener.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8192)
+	reader, writer = await asyncio.open_connection(listener.address.host, listener.address.port)
+	writer.get_extra_info('socket').setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 8192)
+	peer = await listener.accept_async()
+	cast(asyncio.Transport, peer.writer.transport).pause_reading()
+	return AsyncConnectionPair(AsyncConnection(reader, writer), writer, peer)
+
+
 class SocketFactory(Protocol):
 	def __call__(self, chunks: Iterable[Union[bytes, BaseException]] = ()) -> MemorySocket:
 		...
@@ -266,6 +331,27 @@ class TcpListenerFactory(Protocol):
 class RunAsync(Protocol):
 	def __call__(self, coroutine: Coroutine[Any, Any, _T]) -> _T:
 		...
+
+
+class ThreadCall:
+	def __init__(self, target: Callable[[], None]):
+		self.error: Optional[BaseException] = None
+		self.done = threading.Event()
+		def invoke():
+			try:
+				target()
+			except BaseException as err:
+				self.error = err
+			finally:
+				self.done.set()
+		self.thread = threading.Thread(target=invoke, daemon=True)
+		self.thread.start()
+
+	def join(self):
+		self.thread.join(3)
+		assert not self.thread.is_alive(), 'worker did not finish'
+		if self.error is not None:
+			raise self.error
 
 
 @dataclasses.dataclass(frozen=True)

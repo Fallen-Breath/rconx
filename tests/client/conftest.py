@@ -34,7 +34,7 @@ def rcon_factory(monkeypatch: pytest.MonkeyPatch) -> Generator[SyncRconFactory, 
 
 
 @pytest.fixture
-def async_rcon_factory(monkeypatch: pytest.MonkeyPatch, run_async: RunAsync) -> Generator[AsyncRconFactory, None, None]:
+def async_rcon_factory(monkeypatch: pytest.MonkeyPatch, run_async: RunAsync, memory_writer_support: None) -> Generator[AsyncRconFactory, None, None]:
 	endpoints: List[AsyncRconEndpoint] = []
 
 	async def connect(host: str, port: int, **kwargs: Any) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:

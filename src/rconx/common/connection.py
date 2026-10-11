@@ -13,6 +13,7 @@ from rconx.common.utils import BytesBuffer, Deadline, validate_packet_size_limit
 
 DEFAULT_MAX_RECEIVE_PACKET_SIZE = 4 * 1024 * 1024
 _READ_CHUNK_SIZE = 64 * 1024
+_HAS_WAIT_CLOSED = hasattr(asyncio.StreamWriter, 'wait_closed')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -58,7 +59,7 @@ class Connection(__BaseConnection):
 	@property
 	def closed(self) -> bool:
 		"""
-		Whether this connection has been closed locally
+		Whether local closure has begun
 		"""
 		return self.__socket is None
 
@@ -129,12 +130,17 @@ class Connection(__BaseConnection):
 
 	def close(self):
 		"""
-		Close the connection
+		Shut down socket I/O and close the connection
 		"""
 		sock = self.__socket
 		self.__socket = None
 		if sock is not None:
-			sock.close()
+			# TODO: Verify cross-platform wakeup and safety of shutdown-before-close during concurrent socket I/O.
+			try:
+				with contextlib.suppress(OSError):
+					sock.shutdown(socket.SHUT_RDWR)
+			finally:
+				sock.close()
 
 	def __enter__(self) -> 'Connection':
 		"""
@@ -200,11 +206,13 @@ class AsyncConnection(__BaseConnection):
 		"""
 		super().__init__(**kwargs)
 		self.__stream: Optional[_AsyncStream] = _AsyncStream(reader, writer)
+		self.__closing_stream: Optional[_AsyncStream] = None
+		self.__drain_lock: Optional[asyncio.Lock] = None
 
 	@property
 	def closed(self) -> bool:
 		"""
-		Whether this connection has been closed locally
+		Whether local closure has begun
 		"""
 		return self.__stream is None
 
@@ -219,7 +227,8 @@ class AsyncConnection(__BaseConnection):
 		with self.__close_on_error():
 			try:
 				stream.writer.write(data)
-				await stream.writer.drain()
+				async with self.__get_drain_lock():
+					await stream.writer.drain()
 			except OSError as err:
 				raise RconConnectionError('failed to send packet') from err
 
@@ -266,17 +275,30 @@ class AsyncConnection(__BaseConnection):
 
 	async def aclose(self):
 		"""
-		Close the connection
+		Close normally, allowing buffered writes to finish
 		"""
 		stream = self.__stream
 		self.__stream = None
 		if stream is not None:
+			self.__closing_stream = stream
 			try:
-				stream.writer.close()
-				await self.__wait_writer_closed(stream.writer)
+				await self.__close_writer(stream.writer)
 			except BaseException:
-				self.__abort_stream(stream)
+				with contextlib.suppress(BaseException):
+					self.abort()
 				raise
+			finally:
+				self.__closing_stream = None
+
+	def abort(self):
+		"""
+		Request immediate connection termination, discarding unsent buffers
+		"""
+		stream = self.__stream if self.__stream is not None else self.__closing_stream
+		self.__stream = None
+		self.__closing_stream = None
+		if stream is not None:
+			stream.writer.transport.abort()
 
 	async def __aenter__(self) -> 'AsyncConnection':
 		"""
@@ -300,16 +322,9 @@ class AsyncConnection(__BaseConnection):
 		try:
 			yield
 		except BaseException:
-			stream = self.__stream
-			self.__stream = None
-			if stream is not None:
-				self.__abort_stream(stream)
+			with contextlib.suppress(BaseException):
+				self.abort()
 			raise
-
-	@classmethod
-	def __abort_stream(cls, stream: _AsyncStream):
-		with contextlib.suppress(BaseException):
-			stream.writer.transport.abort()
 
 	async def __receive_packet(self, reader: asyncio.StreamReader, header_prefix: bytes = b'') -> Packet:
 		header = header_prefix + await self.__read_exactly(reader, LENGTH_HEADER.size - len(header_prefix), stage='packet length header')
@@ -326,8 +341,18 @@ class AsyncConnection(__BaseConnection):
 		except OSError as err:
 			raise RconConnectionError('failed to read {}'.format(stage)) from err
 
-	@classmethod
-	async def __wait_writer_closed(cls, writer: asyncio.StreamWriter):
-		wait_closed = getattr(writer, 'wait_closed', None)
-		if wait_closed is not None:
-			await wait_closed()
+	def __get_drain_lock(self) -> asyncio.Lock:
+		if self.__drain_lock is None:
+			self.__drain_lock = asyncio.Lock()
+		return self.__drain_lock
+
+	async def __close_writer(self, writer: asyncio.StreamWriter):
+		# Older Proactor transports ignore abort() once close() has begun.
+		writer.transport.set_write_buffer_limits(high=0)
+		async with self.__get_drain_lock():
+			if self.__closing_stream is None:
+				return
+			await writer.drain()
+		writer.close()
+		if _HAS_WAIT_CLOSED:
+			await writer.wait_closed()

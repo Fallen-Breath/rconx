@@ -7,7 +7,7 @@ import pytest
 from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
 from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError
 from rconx.common.protocol import Packet
-from tests.support import AsyncConnectionFactory, RunAsync, BasicMemoryWriter, FailingReader, MemoryWriter, make_frame
+from tests.support import AsyncConnectionFactory, RunAsync, BasicMemoryWriter, FailingReader, MemoryWriter, TcpListenerFactory, buffer_stream_output, make_frame, open_async_connection_pair, read_async_packet
 
 
 @pytest.mark.parametrize('window', [0, 0.001])
@@ -326,7 +326,7 @@ def test_context_closes_connection(run_async: RunAsync, async_connection_factory
 
 
 @pytest.mark.parametrize('cancel', [False, True])
-def test_close_failure_releases_transport_and_propagates_error(run_async: RunAsync, cancel: bool):
+def test_close_failure_releases_transport_and_propagates_error(run_async: RunAsync, memory_writer_support: None, cancel: bool):
 	async def scenario():
 		writer = MemoryWriter()
 		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
@@ -350,7 +350,8 @@ def test_close_failure_releases_transport_and_propagates_error(run_async: RunAsy
 	run_async(scenario())
 
 
-def test_close_without_wait_closed_support(run_async: RunAsync):
+def test_close_without_wait_closed_support(run_async: RunAsync, monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.setattr('rconx.common.connection._HAS_WAIT_CLOSED', False)
 	async def scenario():
 		writer = BasicMemoryWriter()
 		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
@@ -359,4 +360,88 @@ def test_close_without_wait_closed_support(run_async: RunAsync):
 		assert writer.closing
 		await connection.aclose()
 
+	run_async(scenario())
+
+
+def test_normal_close_flushes_buffered_output(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory):
+	listener = tcp_listener_factory()
+	async def scenario():
+		pair = await open_async_connection_pair(listener)
+		packet = Packet(1, 2, b'x' * (256 * 1024))
+		try:
+			prefilled = await buffer_stream_output(pair.writer)
+			pair.writer.transport.set_write_buffer_limits(high=0)
+			sending = asyncio.ensure_future(pair.connection.send_packet(packet))
+			await asyncio.sleep(0.05)
+			assert not sending.done()
+			closing = asyncio.ensure_future(pair.connection.aclose())
+			await asyncio.sleep(0.05)
+			assert not closing.done()
+			cast(asyncio.Transport, pair.peer.writer.transport).resume_reading()
+			assert await pair.peer.reader.readexactly(prefilled) == b'x' * prefilled
+			assert await read_async_packet(pair.peer.reader) == packet
+			await sending
+			await closing
+			assert await pair.peer.reader.read(1) == b''
+		finally:
+			await pair.aclose()
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('cancel_close', [False, True], ids=['abort', 'cancel-close'])
+def test_interrupt_concurrent_send_and_close(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, cancel_close: bool):
+	listener = tcp_listener_factory()
+	async def scenario():
+		pair = await open_async_connection_pair(listener)
+		try:
+			await buffer_stream_output(pair.writer)
+			pair.writer.transport.set_write_buffer_limits(high=0)
+			sending = asyncio.ensure_future(pair.connection.send_packet(Packet(1, 2, b'x' * (256 * 1024))))
+			await asyncio.sleep(0.05)
+			assert not sending.done()
+			closing = asyncio.ensure_future(pair.connection.aclose())
+			await asyncio.sleep(0.05)
+			assert not closing.done()
+			if cancel_close:
+				closing.cancel()
+				with pytest.raises(asyncio.CancelledError):
+					await closing
+			else:
+				pair.connection.abort()
+				await closing
+			await sending
+			assert pair.connection.closed
+		finally:
+			await pair.aclose()
+	run_async(scenario())
+
+
+def test_close_after_completed_send_remains_abortable(run_async: RunAsync, memory_writer_support: None, monkeypatch: pytest.MonkeyPatch):
+	async def scenario():
+		writer = MemoryWriter()
+		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
+		await connection.send_packet(Packet(1, 2, b'completed send'))
+		waiting = asyncio.Event()
+		release = asyncio.Event()
+		writer.drain_started = waiting
+		writer.close_started = waiting
+		writer.drain_gate = release
+		writer.close_gate = release
+		abort = writer.transport.abort
+		def interrupt():
+			abort()
+			release.set()
+		monkeypatch.setattr(writer.transport, 'abort', interrupt)
+		closing = asyncio.ensure_future(connection.aclose())
+		try:
+			await waiting.wait()
+			assert not closing.done()
+			connection.abort()
+			assert writer.released
+			await closing
+			assert connection.closed
+		finally:
+			release.set()
+			connection.abort()
+			await closing
 	run_async(scenario())

@@ -83,8 +83,6 @@ class Session(_BaseSession[Connection]):
 	def run(self):
 		try:
 			self.__exchange()
-		except asyncio.CancelledError:
-			raise
 		except Exception as error:
 			level = logging.DEBUG if isinstance(error, (RconConnectionError, RconTimeoutError, RconPacketDecodeError, RconProtocolError)) else logging.ERROR
 			SERVER_LOGGER.log(level, 'Session ended: %s (%s)', self._info, error, exc_info=level == logging.ERROR)

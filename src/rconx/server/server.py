@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import functools
 import hmac
 import threading
 from typing import Callable, Optional, Set, Union
@@ -54,7 +53,6 @@ class RconServer:
 		self.__lock = threading.Lock()
 		self.__serve_called = False
 		self.__stopping = False
-		self.__failure: Optional[BaseException] = None
 
 	def serve(self, *, on_started: Optional[Callable[[], None]] = None):
 		with self.__lock:
@@ -77,8 +75,6 @@ class RconServer:
 			with self.__lock:
 				self.__stopping = True
 			self.__pool.shutdown(wait=True)
-		if self.__failure is not None:
-			raise self.__failure
 		SERVER_LOGGER.info('RCON server %r finished; all session work ended', self)
 
 	def shutdown(self):
@@ -94,19 +90,9 @@ class RconServer:
 			future = None
 			if not self.__stopping:
 				session = Session(connection, self.__config, self.__authentication, self.__command_handler)
-				future = self.__pool.try_submit(functools.partial(self.__run_session, session))
+				future = self.__pool.try_submit(session.run)
 		if future is None:
 			connection.close()
-
-	def __run_session(self, session: Session):
-		try:
-			session.run()
-		except BaseException as err:
-			with self.__lock:
-				if self.__failure is None:
-					self.__failure = err
-			with contextlib.suppress(Exception):
-				self.shutdown()
 
 
 class AsyncRconServer:
@@ -134,7 +120,6 @@ class AsyncRconServer:
 		self.__tasks: Set[asyncio.Future[None]] = set()
 		self.__serve_called = False
 		self.__stopping = False
-		self.__failure: Optional[BaseException] = None
 
 	async def serve(self, *, on_started: Optional[Callable[[], None]] = None):
 		if self.__serve_called:
@@ -149,8 +134,6 @@ class AsyncRconServer:
 			raise
 		else:
 			await self.__wait_for_sessions()
-		if self.__failure is not None:
-			raise self.__failure
 		SERVER_LOGGER.info('Async RCON server %r finished; all session work ended', self)
 
 	async def shutdown(self):
@@ -188,17 +171,6 @@ class AsyncRconServer:
 			connection.abort()
 			return
 		session = AsyncSession(connection, self.__config, self.__authentication, self.__command_handler)
-		task = asyncio.ensure_future(self.__run_session(session))
+		task = asyncio.ensure_future(session.run())
 		self.__tasks.add(task)
 		task.add_done_callback(self.__tasks.discard)
-
-	async def __run_session(self, session: AsyncSession):
-		try:
-			await session.run()
-		except asyncio.CancelledError:
-			raise
-		except BaseException as err:
-			if self.__failure is None:
-				self.__failure = err
-			with contextlib.suppress(Exception):
-				await self.shutdown()

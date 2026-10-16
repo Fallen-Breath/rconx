@@ -6,6 +6,8 @@ from typing import Generator, Optional, Union
 
 from typing_extensions import Unpack
 
+from rconx.common.async_utils import await_with_timeout
+from rconx.common.connection_info import ConnectionAddress, ConnectionInfo
 from rconx.common.connection_options import ConnectionOptions
 from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconTimeoutError
 from rconx.common.protocol import LENGTH_HEADER, MIN_PACKET_BODY_SIZE, Packet
@@ -47,6 +49,13 @@ class __BaseConnection:
 			raise ValueError('packet size {} exceeds max_receive_packet_size {}'.format(framed_size, maximum_size))
 		return packet_size
 
+	@staticmethod
+	def _get_phase_timeout(total: Deadline, timeout: Optional[float]) -> Optional[float]:
+		remaining = total.get_remaining_or_raise()
+		if remaining is None:
+			return timeout
+		return remaining if timeout is None else min(remaining, timeout)
+
 
 class Connection(__BaseConnection):
 	def __init__(self, sock: socket.socket, **kwargs: Unpack[ConnectionOptions]):
@@ -83,17 +92,29 @@ class Connection(__BaseConnection):
 				raise RconConnectionError('failed to send packet') from err
 			deadline.get_remaining_or_raise()
 
-	def receive_packet(self, *, timeout: Optional[float] = None) -> Packet:
+	def receive_packet(
+		self, *, timeout: Optional[float] = None, first_byte_timeout: Optional[float] = None, after_first_byte_timeout: Optional[float] = None,
+	) -> Packet:
 		"""
 		Receive the next complete RCON packet
 
 		:keyword timeout: Total timeout in seconds. ``None`` disables the timeout; ``0`` expires immediately
 		:return: The received packet
 		"""
+		validate_timeout(first_byte_timeout, name='first_byte_timeout')
+		validate_timeout(after_first_byte_timeout, name='after_first_byte_timeout')
 		deadline = Deadline(timeout)
 		sock = self.__get_socket()
 		with self.__close_on_error():
+			if first_byte_timeout is not None or after_first_byte_timeout is not None:
+				first_byte = self.__read_exactly(sock, 1, Deadline(self._get_phase_timeout(deadline, first_byte_timeout)), stage='the first byte of a packet')
+				return self.__receive_packet(sock, Deadline(self._get_phase_timeout(deadline, after_first_byte_timeout)), first_byte)
 			return self.__receive_packet(sock, deadline)
+
+	def get_info(self) -> ConnectionInfo:
+		sock = self.__get_socket()
+		local, remote = sock.getsockname(), sock.getpeername()
+		return ConnectionInfo(ConnectionAddress(local[0], local[1]), ConnectionAddress(remote[0], remote[1]))
 
 	def try_receive_packet(self, *, first_byte_timeout: float, timeout: Optional[float] = None) -> Optional[Packet]:
 		"""
@@ -232,15 +253,31 @@ class AsyncConnection(__BaseConnection):
 			except OSError as err:
 				raise RconConnectionError('failed to send packet') from err
 
-	async def receive_packet(self) -> Packet:
+	async def receive_packet(
+		self, *, timeout: Optional[float] = None, first_byte_timeout: Optional[float] = None, after_first_byte_timeout: Optional[float] = None,
+	) -> Packet:
 		"""
 		Receive the next complete RCON packet
 
 		:return: The received packet
 		"""
+		validate_timeout(first_byte_timeout, name='first_byte_timeout')
+		validate_timeout(after_first_byte_timeout, name='after_first_byte_timeout')
+		deadline = Deadline(timeout)
 		stream = self.__get_stream()
 		with self.__close_on_error():
-			return await self.__receive_packet(stream.reader)
+			if first_byte_timeout is not None or after_first_byte_timeout is not None:
+				phase_timeout = self._get_phase_timeout(deadline, first_byte_timeout)
+				first_byte = await await_with_timeout(self.__read_exactly(stream.reader, 1, stage='the first byte of a packet'), phase_timeout)
+				phase_timeout = self._get_phase_timeout(deadline, after_first_byte_timeout)
+				return await await_with_timeout(self.__receive_packet(stream.reader, first_byte), phase_timeout)
+			remaining = deadline.get_remaining_or_raise()
+			return await await_with_timeout(self.__receive_packet(stream.reader), remaining)
+
+	def get_info(self) -> ConnectionInfo:
+		writer = self.__get_stream().writer
+		local, remote = writer.get_extra_info('sockname'), writer.get_extra_info('peername')
+		return ConnectionInfo(ConnectionAddress(local[0], local[1]), ConnectionAddress(remote[0], remote[1]))
 
 	async def try_receive_packet(self, *, first_byte_timeout: float) -> Optional[Packet]:
 		"""

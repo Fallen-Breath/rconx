@@ -16,6 +16,7 @@ from rconx.client.operation import AsyncRconOperationContext, RequestIdCounter, 
 from rconx.client.preset import RconPreset
 from rconx.client.raw import AsyncRawRconClient, LocalAddress, RawRconClient
 from rconx.common.connection import ConnectionConfig
+from rconx.common.content import RconContent
 from rconx.common.exceptions import RconStateError
 from rconx.common.protocol import LENGTH_HEADER, MIN_PACKET_BODY_SIZE
 from rconx.common.utils import Deadline, validate_packet_size_limit
@@ -54,23 +55,13 @@ class _RconClientConfig(ConnectionConfig):
 		validate_packet_size_limit(self.max_response_size, 'max_response_size')
 
 
-@dataclasses.dataclass(frozen=True)
-class RconResponse:
+class RconResponse(RconContent):
 	"""
 	Read-only command response
 	"""
 
-	content: bytes
-	"""Collected response payload as bytes"""
-
-	__default_encoding: str = dataclasses.field(default=_DEFAULT_ENCODING, repr=False, compare=False)
-
-	@property
-	def text(self) -> str:
-		"""
-		Decode the response using the client's configured encoding, with strict error handling
-		"""
-		return self.content.decode(self.__default_encoding)
+	def __init__(self, content: bytes, default_encoding: str = _DEFAULT_ENCODING):
+		super().__init__(content, default_encoding=default_encoding)
 
 
 class _BaseRconClient:

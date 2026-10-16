@@ -66,7 +66,6 @@ class _BaseRawRconServer(Generic[_ConnectionT]):
 		except Exception:
 			with contextlib.suppress(BaseException):
 				self._close_connection(connection)
-			# TODO: Log connection handoff failures when library logging is introduced.
 		except BaseException:
 			with contextlib.suppress(BaseException):
 				self._close_connection(connection)

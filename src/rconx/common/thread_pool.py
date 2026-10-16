@@ -1,5 +1,4 @@
 import dataclasses
-import logging
 import math
 import threading
 import time
@@ -8,7 +7,6 @@ from typing import Any, Callable, Generic, Optional, Set, TypeVar
 
 
 _ResultT = TypeVar('_ResultT')
-_LOGGER = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -138,7 +136,6 @@ class ThreadPool:
 	def __run_worker(self, worker: _Worker):
 		error: Optional[BaseException] = None
 		try:
-			_LOGGER.debug('Thread pool worker started: %s', worker.thread.name)
 			while True:
 				task = self.__take_task(worker)
 				if task is None:
@@ -160,9 +157,6 @@ class ThreadPool:
 			if error is not None:
 				if unfinished is not None and not unfinished.future.done():
 					unfinished.future.set_exception(error)
-				_LOGGER.error('Thread pool worker failed: %s', worker.thread.name, exc_info=(type(error), error, error.__traceback__))
-			else:
-				_LOGGER.debug('Thread pool worker exited: %s', worker.thread.name)
 
 	def __discard_finished_threads(self):
 		self.__retired_threads = {thread for thread in self.__retired_threads if thread.is_alive()}

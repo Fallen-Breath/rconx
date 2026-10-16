@@ -98,7 +98,12 @@ class Connection(__BaseConnection):
 		"""
 		Receive the next complete RCON packet
 
-		:keyword timeout: Total timeout in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		Timeouts are in seconds; ``None`` disables a budget and ``0`` expires immediately.
+		Phase budgets cannot extend the total timeout. Receive failures, including timeouts, close the connection.
+
+		:keyword timeout: Total receive budget
+		:keyword first_byte_timeout: Budget for waiting for the first byte
+		:keyword after_first_byte_timeout: Budget for receiving the rest of the packet after its first byte
 		:return: The received packet
 		"""
 		validate_timeout(first_byte_timeout, name='first_byte_timeout')
@@ -112,6 +117,9 @@ class Connection(__BaseConnection):
 			return self.__receive_packet(sock, deadline)
 
 	def get_info(self) -> ConnectionInfo:
+		"""
+		Return a read-only snapshot of both endpoint addresses; requires an open connection
+		"""
 		sock = self.__get_socket()
 		local, remote = sock.getsockname(), sock.getpeername()
 		return ConnectionInfo(ConnectionAddress(local[0], local[1]), ConnectionAddress(remote[0], remote[1]))
@@ -259,6 +267,12 @@ class AsyncConnection(__BaseConnection):
 		"""
 		Receive the next complete RCON packet
 
+		Timeouts are in seconds; ``None`` disables a budget and ``0`` expires immediately.
+		Phase budgets cannot extend the total timeout. Receive failures, timeouts and caller cancellation close the connection.
+
+		:keyword timeout: Total receive budget
+		:keyword first_byte_timeout: Budget for waiting for the first byte
+		:keyword after_first_byte_timeout: Budget for receiving the rest of the packet after its first byte
 		:return: The received packet
 		"""
 		validate_timeout(first_byte_timeout, name='first_byte_timeout')
@@ -275,6 +289,9 @@ class AsyncConnection(__BaseConnection):
 			return await await_with_timeout(self.__receive_packet(stream.reader), remaining)
 
 	def get_info(self) -> ConnectionInfo:
+		"""
+		Return a read-only snapshot of both endpoint addresses; requires an open connection
+		"""
 		writer = self.__get_stream().writer
 		local, remote = writer.get_extra_info('sockname'), writer.get_extra_info('peername')
 		return ConnectionInfo(ConnectionAddress(local[0], local[1]), ConnectionAddress(remote[0], remote[1]))

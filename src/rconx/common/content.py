@@ -1,4 +1,11 @@
 class RconContent:
+	"""
+	Read-only byte content; ``str`` returns ``text``
+
+	:param content: Raw payload bytes
+	:keyword default_encoding: Encoding used for text access, defaulting to ``utf8``
+	"""
+
 	def __init__(self, content: bytes, *, default_encoding: str = 'utf8'):
 		self.__content = content
 		self.__default_encoding = default_encoding
@@ -9,6 +16,9 @@ class RconContent:
 
 	@property
 	def text(self) -> str:
+		"""
+		Decode the content using the configured encoding, with strict error handling
+		"""
 		return self.__content.decode(self.__default_encoding)
 
 	def __str__(self) -> str:

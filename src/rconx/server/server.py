@@ -31,12 +31,28 @@ def _create_fixed_authentication_handler(password: Union[str, bytes], encoding: 
 
 
 class RconServer:
+	"""
+	Synchronous RCON server following SRCDS authentication and response conventions
+	"""
+
 	def __init__(
 		self, host: str, port: int, *,
 		authentication: _Authentication,
 		command_handler: CommandHandler,
 		**kwargs: Unpack[RconServerOptions],
 	):
+		"""
+		Configure the server without opening a listener
+
+		Callbacks receive ``(RconContent, ConnectionInfo)`` and run serially per connection.
+		Different connections may invoke them concurrently on different threads. Callback exceptions close the connection.
+
+		:param host: Local host name or IP address
+		:param port: Local TCP port
+		:keyword authentication: Fixed ``str``/``bytes`` password, or callback returning ``bool``
+		:keyword command_handler: Callback returning ``bytes`` or ``str``; encoded output must not contain NUL
+		:param kwargs: Options described by ``RconServerOptions``
+		"""
 		config = ServerConfig(**kwargs)
 		if isinstance(authentication, (str, bytes)):
 			authentication = _create_fixed_authentication_handler(authentication, config.default_encoding)
@@ -55,6 +71,12 @@ class RconServer:
 		self.__stopping = False
 
 	def serve(self, *, on_started: Optional[Callable[[], None]] = None):
+		"""
+		Run this instance once, waiting for active callbacks to finish before exiting
+
+		:keyword on_started: No-argument callback invoked in the serving thread after listening starts
+		:raises RconStateError: If ``serve`` was already called, including a failed start
+		"""
 		with self.__lock:
 			if self.__serve_called:
 				raise RconStateError('serve() may only be called once')
@@ -78,6 +100,12 @@ class RconServer:
 		SERVER_LOGGER.info('RCON server %r finished; all session work ended', self)
 
 	def shutdown(self):
+		"""
+		Stop accepting connections and close existing connections without waiting for callbacks
+
+		May be called from another thread or a callback. Repeated calls are allowed;
+		calls before ``serve`` have no effect. Wait for ``serve`` to exit for complete shutdown.
+		"""
 		with self.__lock:
 			if not self.__serve_called:
 				return
@@ -96,12 +124,28 @@ class RconServer:
 
 
 class AsyncRconServer:
+	"""
+	Asynchronous RCON server following SRCDS authentication and response conventions
+	"""
+
 	def __init__(
 		self, host: str, port: int, *,
 		authentication: _AsyncAuthentication,
 		command_handler: AsyncCommandHandler,
 		**kwargs: Unpack[RconServerOptions],
 	):
+		"""
+		Configure the server without opening a listener
+
+		Callbacks receive ``(RconContent, ConnectionInfo)`` and run serially per connection.
+		Different connections may invoke them concurrently. Callback exceptions close the connection.
+
+		:param host: Local host name or IP address
+		:param port: Local TCP port
+		:keyword authentication: Fixed ``str``/``bytes`` password, or async callback returning ``bool``
+		:keyword command_handler: Async callback returning ``bytes`` or ``str``; encoded output must not contain NUL
+		:param kwargs: Options described by ``RconServerOptions``
+		"""
 		config = ServerConfig(**kwargs)
 		if isinstance(authentication, (str, bytes)):
 			fixed = _create_fixed_authentication_handler(authentication, config.default_encoding)
@@ -122,6 +166,14 @@ class AsyncRconServer:
 		self.__stopping = False
 
 	async def serve(self, *, on_started: Optional[Callable[[], None]] = None):
+		"""
+		Run this instance once, waiting for active callbacks to finish before exiting
+
+		Use ``serve`` and ``shutdown`` in the same event loop. Caller cancellation propagates after cleanup.
+
+		:keyword on_started: No-argument, non-coroutine callback invoked in the serving event loop after listening starts
+		:raises RconStateError: If ``serve`` was already called, including a failed start
+		"""
 		if self.__serve_called:
 			raise RconStateError('serve() may only be called once')
 		self.__serve_called = True
@@ -137,6 +189,12 @@ class AsyncRconServer:
 		SERVER_LOGGER.info('Async RCON server %r finished; all session work ended', self)
 
 	async def shutdown(self):
+		"""
+		Stop accepting connections, close existing connections and request callback cancellation
+
+		Does not wait for callbacks; await ``serve`` to exit for complete shutdown.
+		May be called from a callback. Repeated calls are allowed; calls before ``serve`` have no effect.
+		"""
 		if not self.__serve_called:
 			return
 		self.__stop_sessions()

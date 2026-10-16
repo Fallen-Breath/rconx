@@ -13,6 +13,7 @@ from rconx.common.content import RconContent
 from rconx.common.exceptions import RconStateError
 from rconx.common.thread_pool import ThreadPool
 from rconx.server.config import ServerConfig
+from rconx.server.log import SERVER_LOGGER
 from rconx.server.raw import AsyncRawRconServer, RawRconServer
 from rconx.server.server_options import RconServerOptions
 from rconx.server.session import AsyncAuthenticationHandler, AsyncCommandHandler, AsyncSession, AuthenticationHandler, CommandHandler, Session, encode_content
@@ -78,6 +79,7 @@ class RconServer:
 			self.__pool.shutdown(wait=True)
 		if self.__failure is not None:
 			raise self.__failure
+		SERVER_LOGGER.info('RCON server %r finished; all session work ended', self)
 
 	def shutdown(self):
 		with self.__lock:
@@ -149,6 +151,7 @@ class AsyncRconServer:
 			await self.__wait_for_sessions()
 		if self.__failure is not None:
 			raise self.__failure
+		SERVER_LOGGER.info('Async RCON server %r finished; all session work ended', self)
 
 	async def shutdown(self):
 		if not self.__serve_called:

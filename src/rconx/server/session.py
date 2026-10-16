@@ -1,15 +1,17 @@
 import asyncio
 import contextlib
+import logging
 from typing import Awaitable, Callable, Generic, Iterable, Iterator, List, TypeVar, Union
 
 from rconx.common.async_utils import await_with_timeout
 from rconx.common.connection import AsyncConnection, Connection
 from rconx.common.connection_info import ConnectionInfo
 from rconx.common.content import RconContent
-from rconx.common.exceptions import RconProtocolError
+from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconProtocolError, RconTimeoutError
 from rconx.common.protocol import LENGTH_HEADER, MIN_PACKET_BODY_SIZE, Packet, PacketType
 from rconx.common.utils import Deadline
 from rconx.server.config import ServerConfig
+from rconx.server.log import ACCESS_LOGGER, SERVER_LOGGER
 
 
 _END_PAYLOAD = b'\x00\x00\x00\x01\x00\x00\x00\x00'
@@ -83,8 +85,9 @@ class Session(_BaseSession[Connection]):
 			self.__exchange()
 		except asyncio.CancelledError:
 			raise
-		except Exception:
-			pass
+		except Exception as error:
+			level = logging.DEBUG if isinstance(error, (RconConnectionError, RconTimeoutError, RconPacketDecodeError, RconProtocolError)) else logging.ERROR
+			SERVER_LOGGER.log(level, 'Session ended: %s (%s)', self._info, error, exc_info=level == logging.ERROR)
 		finally:
 			with contextlib.suppress(Exception):
 				self._connection.close()
@@ -103,9 +106,11 @@ class Session(_BaseSession[Connection]):
 				accepted = self.__authentication(self._wrap_content(packet), self._info)
 				packets = self._create_authentication_responses(packet.request_id, accepted)
 				self._authenticated = accepted
+				ACCESS_LOGGER.info('Authentication decided: %s id=%s accepted=%s', self._info, packet.request_id, accepted)
 			elif packet.packet_type == PacketType.exec_command:
 				result = self.__command_handler(self._wrap_content(packet), self._info)
 				packets = self._generate_command_responses(packet.request_id, result)
+				ACCESS_LOGGER.info('Command result prepared: %s id=%s', self._info, packet.request_id)
 			elif packet.packet_type == PacketType.response_value:
 				packets = self._create_probe_responses(packet.request_id)
 			else:
@@ -130,8 +135,9 @@ class AsyncSession(_BaseSession[AsyncConnection]):
 			await self.__exchange()
 		except asyncio.CancelledError:
 			raise
-		except Exception:
-			pass
+		except Exception as error:
+			level = logging.DEBUG if isinstance(error, (RconConnectionError, RconTimeoutError, RconPacketDecodeError, RconProtocolError)) else logging.ERROR
+			SERVER_LOGGER.log(level, 'Session ended: %s (%s)', self._info, error, exc_info=level == logging.ERROR)
 		finally:
 			with contextlib.suppress(Exception):
 				self._connection.abort()
@@ -151,9 +157,11 @@ class AsyncSession(_BaseSession[AsyncConnection]):
 				accepted = await self.__authentication(self._wrap_content(packet), self._info)
 				packets = self._create_authentication_responses(packet.request_id, accepted)
 				self._authenticated = accepted
+				ACCESS_LOGGER.info('Authentication decided: %s id=%s accepted=%s', self._info, packet.request_id, accepted)
 			elif packet.packet_type == PacketType.exec_command:
 				result = await self.__command_handler(self._wrap_content(packet), self._info)
 				packets = self._generate_command_responses(packet.request_id, result)
+				ACCESS_LOGGER.info('Command result prepared: %s id=%s', self._info, packet.request_id)
 			elif packet.packet_type == PacketType.response_value:
 				packets = self._create_probe_responses(packet.request_id)
 			else:

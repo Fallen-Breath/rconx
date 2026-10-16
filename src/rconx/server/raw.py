@@ -9,6 +9,7 @@ from typing_extensions import Unpack
 from rconx.common.connection import AsyncConnection, Connection, ConnectionConfig
 from rconx.common.connection_options import ConnectionOptions
 from rconx.common.exceptions import RconConnectionError, RconStateError
+from rconx.server.log import SERVER_LOGGER
 from rconx.server.raw_options import RawRconServerOptions
 from rconx.server.server_connection import AsyncServerConnection, ServerConnection
 
@@ -64,6 +65,7 @@ class _BaseRawRconServer(Generic[_ConnectionT]):
 		try:
 			self.__handler_func(connection)
 		except Exception:
+			SERVER_LOGGER.exception('Connection handoff failed; closing the connection')
 			with contextlib.suppress(BaseException):
 				self._close_connection(connection)
 		except BaseException:
@@ -104,7 +106,9 @@ class RawRconServer(_BaseRawRconServer[Connection]):
 			with self.__lock:
 				self.__sock = sock
 				started = not self.__stopping.is_set()
+				listening_address = sock.getsockname()
 			if started:
+				SERVER_LOGGER.info('TCP listener ready: %s', listening_address)
 				if on_started is not None:
 					on_started()
 				while not self.__stopping.is_set():
@@ -234,6 +238,7 @@ class AsyncRawRconServer(_BaseRawRconServer[AsyncConnection]):
 			except OSError as err:
 				raise RconConnectionError('failed to start server on {}:{}'.format(self._config.host, self._config.port)) from err
 			if not stopping.is_set():
+				SERVER_LOGGER.info('Async TCP listener ready: %s', [sock.getsockname() for sock in cast(asyncio.base_events.Server, self.__server).sockets])
 				if on_started is not None:
 					on_started()
 				await stopping.wait()

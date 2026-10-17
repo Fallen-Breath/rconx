@@ -55,15 +55,6 @@ class _RconClientConfig(ConnectionConfig):
 		validate_packet_size_limit(self.max_response_size, 'max_response_size')
 
 
-class RconResponse(RconContent):
-	"""
-	Read-only command response
-	"""
-
-	def __init__(self, content: bytes, default_encoding: str = _DEFAULT_ENCODING):
-		super().__init__(content, default_encoding=default_encoding)
-
-
 class _BaseRconClient:
 	def __init__(self, *, authentication_handler: AuthenticationHandler, command_handler: CommandHandler, **kwargs: Unpack[RconClientOptions]):
 		self._config = _RconClientConfig(**kwargs)
@@ -280,7 +271,7 @@ class RconClient(_BaseRconClient):
 		self._mark_authenticated()
 
 	@_exclusive_operation
-	def execute(self, command: Union[str, bytes], *, timeout: Optional[float] = None) -> RconResponse:
+	def execute(self, command: Union[str, bytes], *, timeout: Optional[float] = None) -> RconContent:
 		"""
 		Execute a command on the authenticated session and collect its response using the selected preset
 
@@ -296,7 +287,7 @@ class RconClient(_BaseRconClient):
 			self._command_handler.execute(context, payload)
 			content = context.consume_response()
 
-		return RconResponse(content, self._config.default_encoding)
+		return RconContent(content, default_encoding=self._config.default_encoding)
 
 	@_exclusive_operation
 	def close(self):
@@ -409,7 +400,7 @@ class AsyncRconClient(_BaseRconClient):
 		self._mark_authenticated()
 
 	@_exclusive_operation
-	async def execute(self, command: Union[str, bytes]) -> RconResponse:
+	async def execute(self, command: Union[str, bytes]) -> RconContent:
 		"""
 		Execute a command on the authenticated session and collect its response using the selected preset
 
@@ -423,7 +414,7 @@ class AsyncRconClient(_BaseRconClient):
 			await self._command_handler.execute_async(context, payload)
 			content = context.consume_response()
 
-		return RconResponse(content, self._config.default_encoding)
+		return RconContent(content, default_encoding=self._config.default_encoding)
 
 	def __operation(self) -> '_AsyncOperation':
 		context = AsyncRconOperationContext(self.__raw, self._request_id_counter, max_response_size=self._config.max_response_size)

@@ -62,7 +62,7 @@ A client runs one operation at a time. Overlapping calls raise `RconStateError`.
 
 Passwords and commands accept `str` or `bytes`. The `default_encoding` keyword argument to `create` sets the encoding for string inputs and defaults to `utf8`. Byte inputs are sent unchanged.
 
-`execute` returns an `RconResponse` containing the collected command output:
+`execute` returns an `RconContent` containing the collected command output:
 
 | Property | Meaning |
 | --- | --- |

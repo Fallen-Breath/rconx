@@ -13,7 +13,6 @@ from rconx.common.utils import Deadline
 from rconx.server.config import ServerConfig
 from rconx.server.log import ACCESS_LOGGER, SERVER_LOGGER
 
-
 _END_PAYLOAD = b'\x00\x00\x00\x01\x00\x00\x00\x00'
 _ConnectionT = TypeVar('_ConnectionT', Connection, AsyncConnection)
 AuthenticationHandler = Callable[[RconContent, ConnectionInfo], bool]

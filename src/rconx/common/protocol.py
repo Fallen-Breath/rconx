@@ -5,7 +5,6 @@ from typing import Union
 
 from rconx.common.exceptions import RconPacketDecodeError
 
-
 LENGTH_HEADER = struct.Struct('<i')
 _PACKET_HEADER = struct.Struct('<ii')
 _FRAMED_PACKET_HEADER = struct.Struct('<iii')

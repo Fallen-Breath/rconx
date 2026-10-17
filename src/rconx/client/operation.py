@@ -4,7 +4,6 @@ from rconx.client.raw import AsyncRawRconClient, RawRconClient
 from rconx.common.protocol import Packet
 from rconx.common.utils import BytesBuffer, Deadline
 
-
 _INT32_MAX = (1 << 31) - 1
 
 

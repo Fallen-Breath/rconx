@@ -3,7 +3,6 @@ from typing import List, Union
 
 from rconx.common.protocol import Packet, PacketType
 
-
 COMMAND_RESULT = b'result'
 PROBE_END = b'\x00\x00\x00\x01\x00\x00\x00\x00'
 

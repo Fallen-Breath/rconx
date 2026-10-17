@@ -1,13 +1,13 @@
 import asyncio
 import contextlib
 import dataclasses
-import select
 import socket
 import struct
 import threading
 from collections import deque
 from typing import Any, Callable, Coroutine, Deque, Iterable, List, NoReturn, Optional, Tuple, TypeVar, Union, cast
 
+import select
 from typing_extensions import Protocol, SupportsIndex, Unpack
 
 from rconx.client.client import AsyncRconClient, RconClient

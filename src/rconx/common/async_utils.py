@@ -4,7 +4,6 @@ from typing import Awaitable, Optional, TypeVar
 from rconx.common.exceptions import RconTimeoutError
 from rconx.common.utils import Deadline
 
-
 _ResultT = TypeVar('_ResultT')
 
 

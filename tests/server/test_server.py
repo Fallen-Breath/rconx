@@ -14,7 +14,6 @@ from rconx.server.server_options import RconServerOptions
 from tests.server.highlevel_support import COMMAND_RESULT, PROBE_END, ProtocolCase, create_authentication_responses, get_protocol_cases
 from tests.support import Clock, TcpListenerFactory, ThreadCall, read_packet
 
-
 _Socket = socket.socket
 
 

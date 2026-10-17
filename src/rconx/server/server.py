@@ -17,7 +17,6 @@ from rconx.server.raw import AsyncRawRconServer, RawRconServer
 from rconx.server.server_options import RconServerOptions
 from rconx.server.session import AsyncAuthenticationHandler, AsyncCommandHandler, AsyncSession, AuthenticationHandler, CommandHandler, Session, encode_content
 
-
 _Authentication = Union[str, bytes, AuthenticationHandler]
 _AsyncAuthentication = Union[str, bytes, AsyncAuthenticationHandler]
 _WORKER_IDLE_TIMEOUT = 60.0

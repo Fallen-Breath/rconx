@@ -4,6 +4,7 @@ import dataclasses
 import socket
 import threading
 from typing import Callable, Dict, Generic, Optional, TypeVar, cast
+
 from typing_extensions import Unpack
 
 from rconx.common.connection import AsyncConnection, Connection, ConnectionConfig

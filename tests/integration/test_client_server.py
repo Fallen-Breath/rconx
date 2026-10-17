@@ -10,7 +10,6 @@ from rconx.common.exceptions import RconAuthenticationError, RconConnectionError
 from rconx.server.server import AsyncRconServer, RconServer
 from tests.support import TcpAddress
 
-
 _RunServer = Callable[[Union[RconServer, AsyncRconServer]], ContextManager[TcpAddress]]
 
 

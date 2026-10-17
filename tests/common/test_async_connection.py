@@ -1,11 +1,12 @@
 import asyncio
+import socket
 import struct
 from typing import Any, Optional, cast
 
 import pytest
 
 from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
-from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError
+from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconTimeoutError
 from rconx.common.protocol import Packet
 from tests.support import AsyncConnectionFactory, RunAsync, BasicMemoryWriter, FailingReader, MemoryWriter, TcpListenerFactory, buffer_stream_output, make_frame, open_async_connection_pair, read_async_packet
 
@@ -126,6 +127,123 @@ def test_receive_consecutive_packets(run_async: RunAsync, async_connection_facto
 		endpoint = async_connection_factory(make_frame(b'first') + make_frame(b'second', -1, 0))
 		assert await endpoint.connection.receive_packet() == Packet(17, 2, b'first')
 		assert await endpoint.connection.receive_packet() == Packet(-1, 0, b'second')
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('first_byte_ready', [False, True], ids=['body-budget-starts-after-first-byte', 'first-byte-budget-ends-at-first-byte'])
+def test_receive_phase_budgets_are_independent(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, first_byte_ready: bool):
+	async def scenario():
+		frame = make_frame()
+		endpoint = async_connection_factory(frame[:1] if first_byte_ready else b'')
+		receiving = asyncio.ensure_future(endpoint.connection.receive_packet(
+			first_byte_timeout=0.05 if first_byte_ready else None,
+			after_first_byte_timeout=None if first_byte_ready else 0.05,
+		))
+		await endpoint.reader.pending.wait()
+		await asyncio.sleep(0.1)
+		endpoint.reader.feed_data(frame[1:] if first_byte_ready else frame)
+		assert await receiving == Packet(17, 2, b'hello')
+		assert not endpoint.connection.closed
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('stage', ['total', 'first-byte', 'after-first-byte'])
+@pytest.mark.parametrize('budget', [0, 0.001])
+def test_receive_timeout_closes_connection(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, stage: str, budget: float):
+	async def scenario():
+		endpoint = async_connection_factory(make_frame()[:1] if stage == 'after-first-byte' else b'')
+		with pytest.raises(RconTimeoutError):
+			if stage == 'total':
+				await endpoint.connection.receive_packet(timeout=budget)
+			elif stage == 'first-byte':
+				await endpoint.connection.receive_packet(first_byte_timeout=budget, after_first_byte_timeout=10)
+			else:
+				await endpoint.connection.receive_packet(after_first_byte_timeout=budget)
+		assert endpoint.connection.closed
+		assert endpoint.writer.released
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('total_budget, later_budget', [(None, 0.2), (0.2, 10)])
+def test_receive_fragmented_packet_does_not_renew_budgets(
+	run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, total_budget: Optional[float], later_budget: float,
+):
+	async def scenario():
+		frame = make_frame()
+		endpoint = async_connection_factory(frame[:1] if total_budget is None else b'')
+		receiving = asyncio.ensure_future(endpoint.connection.receive_packet(timeout=total_budget, first_byte_timeout=10, after_first_byte_timeout=later_budget))
+		await endpoint.reader.pending.wait()
+		await asyncio.sleep(0.12)
+		endpoint.reader.feed_data(frame[1:4] if total_budget is None else frame[:4])
+		await asyncio.sleep(0.12)
+		endpoint.reader.feed_data(frame[4:])
+		with pytest.raises(RconTimeoutError):
+			await receiving
+		assert endpoint.connection.closed
+		assert endpoint.writer.released
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('stage', ['total', 'first-byte', 'after-first-byte'])
+def test_invalid_receive_timeout_preserves_connection(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, stage: str):
+	async def scenario():
+		endpoint = async_connection_factory(make_frame())
+		with pytest.raises(ValueError):
+			if stage == 'total':
+				await endpoint.connection.receive_packet(timeout=-1)
+			elif stage == 'first-byte':
+				await endpoint.connection.receive_packet(first_byte_timeout=-1)
+			else:
+				await endpoint.connection.receive_packet(after_first_byte_timeout=-1)
+		assert not endpoint.connection.closed
+		assert await endpoint.connection.receive_packet() == Packet(17, 2, b'hello')
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('stage', ['total', 'first-byte', 'after-first-byte'])
+def test_cancel_receive_with_budgets_closes(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, stage: str):
+	async def scenario():
+		endpoint = async_connection_factory(make_frame()[:1] if stage == 'after-first-byte' else b'')
+		if stage == 'total':
+			receiving = asyncio.ensure_future(endpoint.connection.receive_packet(timeout=10))
+		else:
+			receiving = asyncio.ensure_future(endpoint.connection.receive_packet(first_byte_timeout=10, after_first_byte_timeout=10))
+		await endpoint.reader.pending.wait()
+		receiving.cancel()
+		with pytest.raises(asyncio.CancelledError):
+			await receiving
+		assert endpoint.connection.closed
+		assert endpoint.writer.released
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('family', [socket.AF_INET, socket.AF_INET6], ids=['ipv4', 'ipv6'])
+def test_get_info_returns_address_snapshot(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, family: int):
+	listener = tcp_listener_factory(family)
+	async def scenario():
+		pair = await open_async_connection_pair(listener)
+		try:
+			info = pair.connection.get_info()
+			local_address = pair.peer.writer.get_extra_info('peername')
+			assert info.local_address.host == local_address[0]
+			assert info.local_address.port == local_address[1]
+			assert info.remote_address.host == listener.address.host
+			assert info.remote_address.port == listener.address.port
+			await pair.connection.aclose()
+			assert info.local_address.host == local_address[0]
+			assert info.local_address.port == local_address[1]
+			assert info.remote_address.host == listener.address.host
+			assert info.remote_address.port == listener.address.port
+			with pytest.raises(RconConnectionError):
+				pair.connection.get_info()
+		finally:
+			await pair.aclose()
 
 	run_async(scenario())
 

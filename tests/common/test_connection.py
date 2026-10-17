@@ -269,6 +269,105 @@ def test_receive_uses_one_total_timeout(socket_factory: SocketFactory, clock: Cl
 	assert connection.closed
 
 
+@pytest.mark.parametrize('first_delay, later_delay, first_budget, later_budget', [
+	pytest.param(0.8, 0.1, None, 0.3, id='body-budget-starts-after-first-byte'),
+	pytest.param(0.1, 0.3, 0.2, None, id='first-byte-budget-ends-at-first-byte'),
+])
+def test_receive_phase_budgets_are_independent(
+	socket_factory: SocketFactory, clock: Clock, first_delay: float, later_delay: float, first_budget: Optional[float], later_budget: Optional[float],
+):
+	sock = socket_factory([make_frame()])
+	delays = iter([first_delay])
+
+	def receive(sock: MemorySocket):
+		delay = next(delays, later_delay)
+		if sock.timeout is not None and sock.timeout <= delay:
+			clock.advance(sock.timeout)
+			raise socket.timeout()
+		clock.advance(delay)
+
+	sock.on_receive = receive
+	connection = Connection(cast(socket.socket, sock))
+	assert connection.receive_packet(first_byte_timeout=first_budget, after_first_byte_timeout=later_budget) == Packet(17, 2, b'hello')
+	assert not connection.closed
+
+
+def test_receive_first_byte_timeout_closes(socket_factory: SocketFactory, clock: Clock):
+	sock = socket_factory([make_frame()])
+	def receive(sock: MemorySocket):
+		delay = 0.2
+		if sock.timeout is not None and sock.timeout <= delay:
+			clock.advance(sock.timeout)
+			raise socket.timeout()
+		clock.advance(delay)
+
+	sock.on_receive = receive
+	connection = Connection(cast(socket.socket, sock))
+	with pytest.raises(RconTimeoutError):
+		connection.receive_packet(first_byte_timeout=0.1, after_first_byte_timeout=10)
+	assert connection.closed
+
+
+@pytest.mark.parametrize('total_budget, later_budget', [(None, 1), (1, 10)])
+def test_receive_fragmented_packet_does_not_renew_budgets(socket_factory: SocketFactory, clock: Clock, total_budget: Optional[float], later_budget: float):
+	frame = make_frame()
+	sock = socket_factory(frame[index:index + 1] for index in range(len(frame)))
+
+	def receive(sock: MemorySocket):
+		delay = 0.2
+		if sock.timeout is not None and sock.timeout <= delay:
+			clock.advance(sock.timeout)
+			raise socket.timeout()
+		clock.advance(delay)
+
+	sock.on_receive = receive
+	connection = Connection(cast(socket.socket, sock))
+	with pytest.raises(RconTimeoutError):
+		connection.receive_packet(timeout=total_budget, first_byte_timeout=10, after_first_byte_timeout=later_budget)
+	assert connection.closed
+
+
+@pytest.mark.parametrize('first_byte', [False, True], ids=['after-first-byte', 'first-byte'])
+def test_invalid_receive_phase_timeout_preserves_connection(socket_factory: SocketFactory, first_byte: bool):
+	connection = Connection(cast(socket.socket, socket_factory([make_frame()])))
+	with pytest.raises(ValueError):
+		if first_byte:
+			connection.receive_packet(first_byte_timeout=-1)
+		else:
+			connection.receive_packet(after_first_byte_timeout=-1)
+	assert not connection.closed
+	assert connection.receive_packet() == Packet(17, 2, b'hello')
+
+
+@pytest.mark.parametrize('family', [socket.AF_INET, socket.AF_INET6], ids=['ipv4', 'ipv6'])
+def test_get_info_returns_read_only_address_snapshot(tcp_listener_factory: TcpListenerFactory, family: int):
+	listener = tcp_listener_factory(family)
+	with socket.create_connection((listener.address.host, listener.address.port), timeout=2) as peer:
+		connection = Connection(listener.accept())
+		try:
+			info = connection.get_info()
+			remote_address = peer.getsockname()
+			assert info.local_address.host == listener.address.host
+			assert info.local_address.port == listener.address.port
+			assert info.remote_address.host == remote_address[0]
+			assert info.remote_address.port == remote_address[1]
+			with pytest.raises(AttributeError):
+				setattr(info, 'local_address', info.remote_address)
+			with pytest.raises(AttributeError):
+				setattr(info.local_address, 'host', 'different')
+			with pytest.raises(AttributeError):
+				setattr(info.local_address, 'port', 0)
+			connection.close()
+			assert info.local_address.host == listener.address.host
+			assert info.local_address.port == listener.address.port
+			assert info.remote_address.host == remote_address[0]
+			assert info.remote_address.port == remote_address[1]
+			with pytest.raises(RconConnectionError):
+				connection.get_info()
+		finally:
+			connection.close()
+
+
 def test_send_checks_total_timeout_after_io(socket_factory: SocketFactory, clock: Clock):
 	sock = socket_factory()
 	sock.on_send = lambda sock: clock.advance(2)

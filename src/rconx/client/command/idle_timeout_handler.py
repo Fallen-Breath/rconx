@@ -17,7 +17,7 @@ class IdleTimeoutCommandHandler(CommandHandler):
 	"""
 	def __init__(self, *, first_byte_timeout: float):
 		if first_byte_timeout is None:
-			raise TypeError('first_byte_timeout must be a finite non-negative number; got None')
+			raise TypeError('first_byte_timeout must be a finite non-negative number, got None')
 		validate_timeout(first_byte_timeout, name='first_byte_timeout')
 		self.__first_byte_timeout = first_byte_timeout
 
@@ -30,7 +30,7 @@ class IdleTimeoutCommandHandler(CommandHandler):
 		while packet is not None:
 			validate_response_value(packet)
 			if packet.request_id != request.request_id:
-				raise RconProtocolError('unexpected command response request id {}; expected {}'.format(packet.request_id, request.request_id))
+				raise RconProtocolError('unexpected command response request id {}, expected {}'.format(packet.request_id, request.request_id))
 
 			context.append_response(packet.payload)
 			packet = context.try_receive_packet(first_byte_timeout=self.__first_byte_timeout)
@@ -44,7 +44,7 @@ class IdleTimeoutCommandHandler(CommandHandler):
 		while packet is not None:
 			validate_response_value(packet)
 			if packet.request_id != request.request_id:
-				raise RconProtocolError('unexpected command response request id {}; expected {}'.format(packet.request_id, request.request_id))
+				raise RconProtocolError('unexpected command response request id {}, expected {}'.format(packet.request_id, request.request_id))
 
 			context.append_response(packet.payload)
 			packet = await context.try_receive_packet(first_byte_timeout=self.__first_byte_timeout)

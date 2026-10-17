@@ -25,9 +25,9 @@ class MinecraftCommandHandler(CommandHandler):
 				return
 			if packet.request_id != request.request_id:
 				if not ending_probe_sent:
-					raise RconProtocolError('unexpected response request id {} before sending the ending probe; expected command id {}'.format(packet.request_id, request.request_id))
+					raise RconProtocolError('unexpected response request id {} before sending the ending probe, expected command id {}'.format(packet.request_id, request.request_id))
 				raise RconProtocolError(
-					'unexpected response request id {} after sending the ending probe; expected command id {} or ending probe id {}'.format(
+					'unexpected response request id {} after sending the ending probe, expected command id {} or ending probe id {}'.format(
 						packet.request_id, request.request_id, ending_request.request_id,
 					)
 				)
@@ -51,9 +51,9 @@ class MinecraftCommandHandler(CommandHandler):
 				return
 			if packet.request_id != request.request_id:
 				if not ending_probe_sent:
-					raise RconProtocolError('unexpected response request id {} before sending the ending probe; expected command id {}'.format(packet.request_id, request.request_id))
+					raise RconProtocolError('unexpected response request id {} before sending the ending probe, expected command id {}'.format(packet.request_id, request.request_id))
 				raise RconProtocolError(
-					'unexpected response request id {} after sending the ending probe; expected command id {} or ending probe id {}'.format(
+					'unexpected response request id {} after sending the ending probe, expected command id {} or ending probe id {}'.format(
 						packet.request_id, request.request_id, ending_request.request_id,
 					)
 				)

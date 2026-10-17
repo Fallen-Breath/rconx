@@ -22,17 +22,17 @@ class _SrcdsResponseProcessor:
 		# SRCDS sends an empty reply and then a second reply for the ending request; both must be consumed.
 		if self.__received_ending_empty_response:
 			if packet.request_id != self.__ending_request_id:
-				raise RconProtocolError('unexpected request id {} for the second ending probe response; expected {}'.format(packet.request_id, self.__ending_request_id))
+				raise RconProtocolError('unexpected request id {} for the second ending probe response, expected {}'.format(packet.request_id, self.__ending_request_id))
 			self.__is_complete = True
 			return
 
 		if packet.request_id == self.__ending_request_id:
 			if packet.payload:
-				raise RconProtocolError('first ending probe response payload length is {}; expected 0 (request id {})'.format(len(packet.payload), packet.request_id))
+				raise RconProtocolError('first ending probe response payload length is {}, expected 0 (request id {})'.format(len(packet.payload), packet.request_id))
 			self.__received_ending_empty_response = True
 		elif packet.request_id != self.__request_id:
 			raise RconProtocolError(
-				'unexpected SRCDS response request id {}; expected command id {} or ending probe id {}'.format(
+				'unexpected SRCDS response request id {}, expected command id {} or ending probe id {}'.format(
 					packet.request_id, self.__request_id, self.__ending_request_id,
 				)
 			)

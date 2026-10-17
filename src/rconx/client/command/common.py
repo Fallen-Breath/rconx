@@ -7,5 +7,5 @@ def validate_response_value(packet: Packet):
 		raise RconAuthenticationError('server rejected the authenticated session')
 	if packet.packet_type != PacketType.response_value:
 		raise RconProtocolError(
-			'unexpected response type {}; expected {} (response value), request id {}'.format(packet.packet_type, PacketType.response_value, packet.request_id)
+			'unexpected response type {}, expected {} (response value), request id {}'.format(packet.packet_type, PacketType.response_value, packet.request_id)
 		)

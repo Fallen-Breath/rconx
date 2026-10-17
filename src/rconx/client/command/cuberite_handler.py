@@ -22,10 +22,10 @@ class _CuberiteResponseProcessor:
 			raise RconAuthenticationError('server rejected the authenticated session')
 		if packet.packet_type != _RESPONSE_PACKET_TYPE:
 			raise RconProtocolError(
-				'unexpected Cuberite command response type {}; expected {}, request id {}'.format(packet.packet_type, _RESPONSE_PACKET_TYPE, packet.request_id)
+				'unexpected Cuberite command response type {}, expected {}, request id {}'.format(packet.packet_type, _RESPONSE_PACKET_TYPE, packet.request_id)
 			)
 		if packet.request_id != self.__request_id:
-			raise RconProtocolError('unexpected Cuberite command response request id {}; expected {}'.format(packet.request_id, self.__request_id))
+			raise RconProtocolError('unexpected Cuberite command response request id {}, expected {}'.format(packet.request_id, self.__request_id))
 
 		# Cuberite sends an empty acknowledgement and one complete result, both with type 2.
 		self.__received_packet_count += 1

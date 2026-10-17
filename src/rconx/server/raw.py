@@ -65,7 +65,7 @@ class _BaseRawRconServer(Generic[_ConnectionT]):
 		try:
 			self.__handler_func(connection)
 		except Exception:
-			SERVER_LOGGER.exception('Connection handoff failed; closing the connection')
+			SERVER_LOGGER.exception('Connection handler raised an exception')
 			with contextlib.suppress(BaseException):
 				self._close_connection(connection)
 		except BaseException:

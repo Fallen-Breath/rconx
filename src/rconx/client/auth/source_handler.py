@@ -16,13 +16,13 @@ class _AuthenticationResponseProcessor:
 
 	def accept(self, packet: Packet) -> None:
 		if packet.payload:
-			raise RconProtocolError('authentication response payload length is {}; expected 0 (request id {})'.format(len(packet.payload), packet.request_id))
+			raise RconProtocolError('authentication response payload length is {}, expected 0 (request id {})'.format(len(packet.payload), packet.request_id))
 
 		if packet.packet_type == PacketType.auth_response:
 			if packet.request_id == -1:
 				raise RconAuthenticationError('server rejected authentication for request id {}'.format(self.__request_id))
 			if packet.request_id != self.__request_id:
-				raise RconProtocolError('unexpected authentication result request id {}; expected {}'.format(packet.request_id, self.__request_id))
+				raise RconProtocolError('unexpected authentication result request id {}, expected {}'.format(packet.request_id, self.__request_id))
 
 			self.__is_complete = True
 			return
@@ -30,12 +30,12 @@ class _AuthenticationResponseProcessor:
 		# Allow at most one empty response-value packet before the authentication result.
 		if packet.packet_type != PacketType.response_value:
 			raise RconProtocolError(
-				'unexpected authentication response type {}; expected {} (response value) or {} (authentication result)'.format(
+				'unexpected authentication response type {}, expected {} (response value) or {} (authentication result)'.format(
 					packet.packet_type, PacketType.response_value, PacketType.auth_response,
 				)
 			)
 		if packet.request_id != self.__request_id:
-			raise RconProtocolError('unexpected empty authentication response request id {}; expected {}'.format(packet.request_id, self.__request_id))
+			raise RconProtocolError('unexpected empty authentication response request id {}, expected {}'.format(packet.request_id, self.__request_id))
 
 		if self.__received_empty_response:
 			raise RconProtocolError('received a second empty response-value packet before the authentication result (request id {})'.format(packet.request_id))

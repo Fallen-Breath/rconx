@@ -166,7 +166,7 @@ class AsyncRawRconClient:
 		try:
 			sock = writer.get_extra_info('socket')
 			if sock is None:
-				raise RconConnectionError('tcp connection does not expose a socket')
+				raise RconConnectionError('TCP connection does not expose a socket')
 			cast(socket.socket, sock).setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 		except OSError as err:
 			writer.transport.abort()

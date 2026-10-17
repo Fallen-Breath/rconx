@@ -135,7 +135,7 @@ class Connection(__BaseConnection):
 		:return: The received packet, or ``None`` if the first-byte wait expires while the total budget remains
 		"""
 		if first_byte_timeout is None:
-			raise TypeError('first_byte_timeout must be a finite non-negative number; got None')
+			raise TypeError('first_byte_timeout must be a finite non-negative number, got None')
 		validate_timeout(first_byte_timeout, name='first_byte_timeout')
 		deadline = Deadline(timeout)
 		sock = self.__get_socket()
@@ -306,7 +306,7 @@ class AsyncConnection(__BaseConnection):
 		:return: The received packet, or ``None`` if the first-byte wait expires before a packet starts
 		"""
 		if first_byte_timeout is None:
-			raise TypeError('first_byte_timeout must be a finite non-negative number; got None')
+			raise TypeError('first_byte_timeout must be a finite non-negative number, got None')
 		validate_timeout(first_byte_timeout, name='first_byte_timeout')
 		stream = self.__get_stream()
 

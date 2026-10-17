@@ -28,7 +28,7 @@ class _BaseOperationContext:
 
 	def prepare_request(self, packet_type: int, payload: bytes) -> Packet:
 		if not isinstance(packet_type, int):
-			raise TypeError('packet type must be an integer; got {}'.format(type(packet_type).__name__))
+			raise TypeError('packet type must be an integer, got {}'.format(type(packet_type).__name__))
 		if packet_type < -_INT32_MAX - 1 or packet_type > _INT32_MAX:
 			raise ValueError('packet type {} is outside the protocol type field range [{}, {}]'.format(packet_type, -_INT32_MAX - 1, _INT32_MAX))
 

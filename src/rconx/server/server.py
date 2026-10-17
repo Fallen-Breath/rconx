@@ -57,7 +57,7 @@ class RconServer:
 		if isinstance(authentication, (str, bytes)):
 			authentication = _create_fixed_authentication_handler(authentication, config.default_encoding)
 		if not callable(authentication) or not callable(command_handler):
-			raise TypeError('authentication and command_handler must be callable')
+			raise TypeError('authentication must be str, bytes or callable, and command_handler must be callable')
 		self.__config = config
 		self.__authentication = authentication
 		self.__command_handler = command_handler
@@ -97,7 +97,7 @@ class RconServer:
 			with self.__lock:
 				self.__stopping = True
 			self.__pool.shutdown(wait=True)
-		SERVER_LOGGER.info('RCON server %r finished; all session work ended', self)
+		SERVER_LOGGER.info('RCON server %r stopped', self)
 
 	def shutdown(self):
 		"""
@@ -153,7 +153,7 @@ class AsyncRconServer:
 				return fixed(content, info)
 			authentication = authenticate
 		if not callable(authentication) or not callable(command_handler):
-			raise TypeError('authentication and command_handler must be callable')
+			raise TypeError('authentication must be str, bytes or callable, and command_handler must be callable')
 		self.__config = config
 		self.__authentication = authentication
 		self.__command_handler = command_handler
@@ -186,7 +186,7 @@ class AsyncRconServer:
 			raise
 		else:
 			await self.__wait_for_sessions()
-		SERVER_LOGGER.info('Async RCON server %r finished; all session work ended', self)
+		SERVER_LOGGER.info('Async RCON server %r stopped', self)
 
 	async def shutdown(self):
 		"""

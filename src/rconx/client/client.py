@@ -50,7 +50,7 @@ class _RconClientConfig(ConnectionConfig):
 			codecs.lookup(self.default_encoding)
 			''.encode(self.default_encoding)
 		except LookupError as err:
-			raise ValueError('default_encoding must name a text encoding; got {!r}'.format(self.default_encoding)) from err
+			raise ValueError('default_encoding must name a text encoding, got {!r}'.format(self.default_encoding)) from err
 
 		validate_packet_size_limit(self.max_response_size, 'max_response_size')
 
@@ -69,9 +69,9 @@ class _BaseRconClient:
 		self._config = _RconClientConfig(**kwargs)
 
 		if not isinstance(authentication_handler, AuthenticationHandler):
-			raise TypeError('authentication_handler must be an AuthenticationHandler; got {}'.format(type(authentication_handler).__name__))
+			raise TypeError('authentication_handler must be an AuthenticationHandler, got {}'.format(type(authentication_handler).__name__))
 		if not isinstance(command_handler, CommandHandler):
-			raise TypeError('command_handler must be a CommandHandler; got {}'.format(type(command_handler).__name__))
+			raise TypeError('command_handler must be a CommandHandler, got {}'.format(type(command_handler).__name__))
 
 		self._authentication_handler = authentication_handler
 		self._command_handler = command_handler
@@ -83,7 +83,7 @@ class _BaseRconClient:
 	@classmethod
 	def _create_handlers(cls, preset: RconPreset, *, first_byte_timeout: Optional[float]) -> _RconHandlers:
 		if not isinstance(preset, RconPreset):
-			raise TypeError('preset must be a RconPreset; got {}'.format(type(preset).__name__))
+			raise TypeError('preset must be a RconPreset, got {}'.format(type(preset).__name__))
 
 		command_handler: CommandHandler
 		if preset == RconPreset.srcds:
@@ -149,7 +149,7 @@ class _BaseRconClient:
 		elif isinstance(body, bytes):
 			payload = body
 		else:
-			raise TypeError('request body must be str or bytes; got {}'.format(type(body).__name__))
+			raise TypeError('request body must be str or bytes, got {}'.format(type(body).__name__))
 		if b'\x00' in payload:
 			raise ValueError('request body contains a null byte at byte offset {}'.format(payload.index(b'\x00')))
 

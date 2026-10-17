@@ -19,7 +19,7 @@ class SinglePacketCommandHandler(CommandHandler):
 		packet = context.receive_packet()
 		validate_response_value(packet)
 		if packet.request_id != request.request_id:
-			raise RconProtocolError('unexpected command response request id {}; expected {}'.format(packet.request_id, request.request_id))
+			raise RconProtocolError('unexpected command response request id {}, expected {}'.format(packet.request_id, request.request_id))
 
 		context.append_response(packet.payload)
 
@@ -30,6 +30,6 @@ class SinglePacketCommandHandler(CommandHandler):
 		packet = await context.receive_packet()
 		validate_response_value(packet)
 		if packet.request_id != request.request_id:
-			raise RconProtocolError('unexpected command response request id {}; expected {}'.format(packet.request_id, request.request_id))
+			raise RconProtocolError('unexpected command response request id {}, expected {}'.format(packet.request_id, request.request_id))
 
 		context.append_response(packet.payload)

@@ -104,11 +104,11 @@ class Session(_BaseSession[Connection]):
 				accepted = self.__authentication(self._wrap_content(packet), self._info)
 				packets = self._create_authentication_responses(packet.request_id, accepted)
 				self._authenticated = accepted
-				ACCESS_LOGGER.info('Authentication decided: %s id=%s accepted=%s', self._info, packet.request_id, accepted)
+				ACCESS_LOGGER.info('Authentication result: %s request_id=%s accepted=%s', self._info, packet.request_id, accepted)
 			elif packet.packet_type == PacketType.exec_command:
 				result = self.__command_handler(self._wrap_content(packet), self._info)
 				packets = self._generate_command_responses(packet.request_id, result)
-				ACCESS_LOGGER.info('Command result prepared: %s id=%s', self._info, packet.request_id)
+				ACCESS_LOGGER.info('Command result prepared: %s request_id=%s', self._info, packet.request_id)
 			elif packet.packet_type == PacketType.response_value:
 				packets = self._create_probe_responses(packet.request_id)
 			else:
@@ -155,11 +155,11 @@ class AsyncSession(_BaseSession[AsyncConnection]):
 				accepted = await self.__authentication(self._wrap_content(packet), self._info)
 				packets = self._create_authentication_responses(packet.request_id, accepted)
 				self._authenticated = accepted
-				ACCESS_LOGGER.info('Authentication decided: %s id=%s accepted=%s', self._info, packet.request_id, accepted)
+				ACCESS_LOGGER.info('Authentication result: %s request_id=%s accepted=%s', self._info, packet.request_id, accepted)
 			elif packet.packet_type == PacketType.exec_command:
 				result = await self.__command_handler(self._wrap_content(packet), self._info)
 				packets = self._generate_command_responses(packet.request_id, result)
-				ACCESS_LOGGER.info('Command result prepared: %s id=%s', self._info, packet.request_id)
+				ACCESS_LOGGER.info('Command result prepared: %s request_id=%s', self._info, packet.request_id)
 			elif packet.packet_type == PacketType.response_value:
 				packets = self._create_probe_responses(packet.request_id)
 			else:

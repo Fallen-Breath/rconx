@@ -15,7 +15,7 @@ def validate_packet_size_limit(value: Optional[int], name: str):
 
 def validate_timeout(timeout: Optional[float], *, name: str = 'timeout'):
 	if timeout is not None and (not math.isfinite(timeout) or timeout < 0):
-		raise ValueError('{} must be finite and non-negative; got {!r}'.format(name, timeout))
+		raise ValueError('{} must be finite and non-negative, got {!r}'.format(name, timeout))
 
 
 class Deadline:

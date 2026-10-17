@@ -48,7 +48,7 @@ class Packet:
 			raise RconPacketDecodeError('packet size {} must be at least {}'.format(packet_size, minimum_size))
 		remaining_size = len(data) - LENGTH_HEADER.size
 		if packet_size != remaining_size:
-			raise RconPacketDecodeError('packet size {} does not match the length header {}'.format(packet_size, remaining_size))
+			raise RconPacketDecodeError('declared packet body size {} does not match actual packet body size {}'.format(packet_size, remaining_size))
 		return cls.__decode(data, LENGTH_HEADER.size)
 
 	def __encode(self, header: bytes) -> bytes:

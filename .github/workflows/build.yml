@@ -2,6 +2,10 @@ name: Build distributions
 
 on:
   workflow_call:
+    outputs:
+      artifact_id:
+        description: ID of the rconx distribution artifact
+        value: ${{ jobs.build.outputs.artifact_id }}
 
 permissions:
   contents: read
@@ -10,6 +14,8 @@ jobs:
   build:
     name: Build wheels and source distributions
     runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.distributions.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v7
 
@@ -54,8 +60,9 @@ jobs:
         run: uvx twine check dist/*
 
       - uses: actions/upload-artifact@v7
+        id: distributions
         with:
-          name: python-distributions
+          name: rconx-distributions-${{ github.sha }}
           path: |
             dist/*.whl
             dist/*.tar.gz

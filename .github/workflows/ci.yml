@@ -64,7 +64,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: python-distributions
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: dist
 
       - name: Publish distributions to PyPI
@@ -83,7 +83,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: python-distributions
+          artifact-ids: ${{ needs.build.outputs.artifact_id }}
           path: dist
 
       - name: Publish distributions to TestPyPI

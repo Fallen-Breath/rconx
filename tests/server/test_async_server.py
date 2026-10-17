@@ -93,8 +93,15 @@ def test_protocol(run_async: RunAsync, async_listeners: List[Server], case: Prot
 		server = AsyncRconServer('127.0.0.1', 0, authentication=case.authentication, command_handler=command)
 		async with _RunningServer(server, async_listeners) as running:
 			peer = await running.connect()
-			await _send(peer, *case.requests)
-			for expected in case.responses:
+			requests, responses = case.requests, case.responses
+			if case.closes and len(requests) > 1:
+				# A later invalid request may abort output still buffered from authentication.
+				await _send(peer, requests[0])
+				for expected in responses[:2]:
+					assert await read_async_packet(peer.reader) == expected
+				requests, responses = requests[1:], responses[2:]
+			await _send(peer, *requests)
+			for expected in responses:
 				assert await read_async_packet(peer.reader) == expected
 			if case.closes:
 				await _assert_closed(peer)

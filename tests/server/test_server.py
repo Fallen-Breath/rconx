@@ -12,7 +12,7 @@ from rconx.common.protocol import Packet, PacketType
 from rconx.server.server import AsyncRconServer, RconServer
 from rconx.server.server_options import RconServerOptions
 from tests.server.highlevel_support import COMMAND_RESULT, PROBE_END, ProtocolCase, create_authentication_responses, get_protocol_cases
-from tests.support import TcpListenerFactory, ThreadCall, read_packet
+from tests.support import Clock, TcpListenerFactory, ThreadCall, read_packet
 
 
 _Socket = socket.socket
@@ -476,7 +476,7 @@ def test_receive_timeout_starts_after_first_byte(sync_listeners: List[socket.soc
 
 
 @pytest.mark.parametrize('delay,expires', [(0.02, False), (0.1, True)], ids=['per-packet-budget', 'blocked-packet'])
-def test_send_timeout_applies_per_packet(monkeypatch: pytest.MonkeyPatch, delay: float, expires: bool):
+def test_send_timeout_applies_per_packet(monkeypatch: pytest.MonkeyPatch, clock: Clock, delay: float, expires: bool):
 	listeners: List[socket.socket] = []
 	delaying = threading.Event()
 	class DelayedSocket(_Socket):
@@ -484,9 +484,17 @@ def test_send_timeout_applies_per_packet(monkeypatch: pytest.MonkeyPatch, delay:
 			super().listen(backlog)
 			listeners.append(self)
 		def sendall(self, data: Any, flags: int = 0):
-			if delaying.is_set() and self.getsockname()[1] == listeners[0].getsockname()[1]:
-				time.sleep(delay)
-			return super().sendall(data, flags)
+			if self.getsockname()[1] != listeners[0].getsockname()[1]:
+				return super().sendall(data, flags)
+			if delaying.is_set():
+				clock.advance(delay)
+			# Use real time only as an I/O hang guard; the clock controls the send budget.
+			timeout = self.gettimeout()
+			self.settimeout(2)
+			try:
+				return super().sendall(data, flags)
+			finally:
+				self.settimeout(timeout)
 	monkeypatch.setattr(socket, 'socket', DelayedSocket)
 	server = RconServer('127.0.0.1', 0, authentication=b'password', command_handler=_echo, send_timeout=0.05, max_send_packet_size=31)
 	with _RunningServer(server, listeners) as running:

@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 import socket
 import threading
-from typing import Any, Callable, ContextManager, Iterator, List, Union
+from typing import Any, Callable, ContextManager, Generator, List, Union
 
 import pytest
 
@@ -22,7 +22,7 @@ def run_server(monkeypatch: pytest.MonkeyPatch) -> Callable[[Union[RconServer, A
 	monkeypatch.setattr(socket.socket, 'bind', observe_bind)
 
 	@contextlib.contextmanager
-	def run(server: Union[RconServer, AsyncRconServer]) -> Iterator[TcpAddress]:
+	def run(server: Union[RconServer, AsyncRconServer]) -> Generator[TcpAddress, None, None]:
 		ready = threading.Event()
 		if isinstance(server, AsyncRconServer):
 			loop = asyncio.new_event_loop()

@@ -1,2 +1,63 @@
 # rconx
-A Python implementation of the Source RCON protocol with client, server, and Minecraft compatibility
+
+[![License](https://img.shields.io/badge/license-LGPL--3.0--only-blue.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/rconx.svg)](https://pypi.org/project/rconx/)
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](#installation)
+
+rconx is a Python library for communicating with TCP servers [that use the Source RCON packet format](https://developer.valvesoftware.com/wiki/Source_RCON_Protocol). It provides synchronous and asynchronous clients for authentication and command execution, together with servers for exposing an application's own command handlers over RCON.
+
+The clients collect command results using selectable presets, including SRCDS, Minecraft, and Cuberite. Low-level clients and servers are available for applications that need to exchange individual RCON packets.
+
+## Installation
+
+rconx supports Python 3.8 and later, with best-effort compatibility for Python 3.6 and 3.7. The examples below use Python 3.8 or later.
+
+rconx is available on [PyPI](https://pypi.org/project/rconx/):
+
+```sh
+python -m pip install rconx
+```
+
+## Quick start
+
+These examples execute `list` on a Minecraft server with RCON enabled.
+
+### Synchronous client
+
+```python
+from rconx import RconClient, RconPreset
+
+with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
+	client.connect()
+	client.authenticate("your-rcon-password")
+	response = client.execute("list")
+	print(response.text)
+```
+
+### Asynchronous client
+
+```python
+import asyncio
+
+from rconx import AsyncRconClient, RconPreset
+
+
+async def main():
+	async with AsyncRconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
+		await client.connect()
+		await client.authenticate("your-rcon-password")
+		response = await client.execute("list")
+		print(response.text)
+
+
+asyncio.run(main())
+```
+
+## Documentation
+
+- The [client guide](docs/client.md) describes client usage, presets, command results, and error handling. It also records compatibility and testing status for individual servers.
+- The [server guide](docs/server.md) describes business callbacks, connection handling, and service lifecycle.
+
+## License
+
+rconx is licensed under [LGPL-3.0-only](LICENSE).

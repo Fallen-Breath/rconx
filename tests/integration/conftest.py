@@ -26,14 +26,20 @@ def run_server(monkeypatch: pytest.MonkeyPatch) -> Callable[[Union[RconServer, A
 		ready = threading.Event()
 		if isinstance(server, AsyncRconServer):
 			loop = asyncio.new_event_loop()
+			stop_requested: asyncio.Future[None] = loop.create_future()
+			async def run_async_server():
+				serving = asyncio.ensure_future(server.serve(on_started=ready.set))
+				await asyncio.wait([serving, stop_requested], return_when=asyncio.FIRST_COMPLETED)
+				await server.shutdown()
+				await serving
 			def serve():
 				asyncio.set_event_loop(loop)
 				try:
-					loop.run_until_complete(server.serve(on_started=ready.set))
+					loop.run_until_complete(run_async_server())
 				finally:
 					loop.close()
 			def shutdown():
-				asyncio.run_coroutine_threadsafe(server.shutdown(), loop).result(timeout=3)
+				loop.call_soon_threadsafe(stop_requested.set_result, None)
 		else:
 			def serve():
 				server.serve(on_started=ready.set)

@@ -46,9 +46,9 @@ jobs:
       - name: Build rconx
         run: uv build --no-sources --out-dir dist
 
-      - name: Build rconx_cli
-        working-directory: packages/rconx_cli
-        run: uv build --no-sources --out-dir ../../dist
+#      - name: Build rconx_cli
+#        working-directory: packages/rconx_cli
+#        run: uv build --no-sources --out-dir ../../dist
 
       - name: Check distribution metadata
         run: uvx twine check dist/*

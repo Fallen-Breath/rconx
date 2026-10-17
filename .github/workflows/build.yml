@@ -1,0 +1,62 @@
+name: Build distributions
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build wheels and source distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: '0.13.1'
+          python-version: '3.14'
+          enable-cache: true
+
+      - name: Check package and tag versions
+        run: |
+          uv run --no-project python - <<'PY'
+          import os
+          import tomllib
+
+          def read_project_version(path: str) -> str:
+          	with open(path, 'rb') as file:
+          		return tomllib.load(file)['project']['version']
+
+          version = read_project_version('pyproject.toml')
+          cli_version = read_project_version('packages/rconx_cli/pyproject.toml')
+          if version != cli_version:
+          	raise SystemExit('Package versions differ: rconx={}, rconx_cli={}'.format(version, cli_version))
+
+          ref = os.environ['GITHUB_REF']
+          if os.environ['GITHUB_EVENT_NAME'] == 'push' and ref.startswith('refs/tags/v'):
+          	expected_ref = 'refs/tags/v{}'.format(version)
+          	if ref != expected_ref:
+          		raise SystemExit('Tag {} does not match package version {}'.format(ref, version))
+          print('Package version: {}'.format(version))
+          PY
+
+      - name: Build rconx
+        run: uv build --no-sources --out-dir dist
+
+      - name: Build rconx_cli
+        working-directory: packages/rconx_cli
+        run: uv build --no-sources --out-dir ../../dist
+
+      - name: Check distribution metadata
+        run: uvx twine check dist/*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error

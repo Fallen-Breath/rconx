@@ -1,0 +1,63 @@
+name: Test
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - '3.8'
+          - '3.9'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+          - '3.14'
+          - '3.15'
+        os:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: '0.13.1'
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install project and development dependencies
+        run: uv sync --locked --dev
+
+      - name: Run pytest
+        run: uv run --no-sync pytest tests
+
+  mypy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: '0.13.1'
+          python-version: '3.14'
+          enable-cache: true
+
+      - name: Install project and development dependencies
+        run: uv sync --locked --dev
+
+      - name: Run mypy
+        run: uv run --no-sync mypy

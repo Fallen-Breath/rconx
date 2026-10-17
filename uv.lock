@@ -917,10 +917,17 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "dataclasses", marker = "python_full_version < '3.7'" },
+    { name = "importlib-metadata", version = "4.8.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.7'" },
+    { name = "importlib-metadata", version = "6.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.7.*'" },
     { name = "typing-extensions", version = "4.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.7'" },
     { name = "typing-extensions", version = "4.7.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.7.*'" },
     { name = "typing-extensions", version = "4.13.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.8.*'" },
     { name = "typing-extensions", version = "4.16.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.9'" },
+]
+
+[package.optional-dependencies]
+cli = [
+    { name = "rconx-cli" },
 ]
 
 [package.dev-dependencies]
@@ -940,14 +947,28 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dataclasses", marker = "python_full_version < '3.7'", specifier = ">=0.8" },
+    { name = "importlib-metadata", marker = "python_full_version < '3.8'", specifier = ">=1.0" },
+    { name = "rconx-cli", marker = "extra == 'cli'", directory = "packages/rconx_cli" },
     { name = "typing-extensions", specifier = ">=4.1" },
 ]
+provides-extras = ["cli"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=0.971" },
     { name = "pytest", specifier = ">=7.0.1" },
 ]
+
+[[package]]
+name = "rconx-cli"
+version = "0.1.0"
+source = { directory = "packages/rconx_cli" }
+dependencies = [
+    { name = "rconx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "rconx", specifier = ">=0.1.0" }]
 
 [[package]]
 name = "tomli"

@@ -26,7 +26,17 @@ classifiers = [
 ]
 dependencies = [
     "dataclasses>=0.8 ; python_full_version < '3.7'",
+    "importlib-metadata>=1.0 ; python_version < '3.8'",
     "typing-extensions>=4.1",
+]
+
+[project.urls]
+Repository = "https://github.com/Fallen-Breath/rconx"
+Issues = "https://github.com/Fallen-Breath/rconx/issues"
+
+[project.optional-dependencies]
+cli = [
+    "rconx_cli>=0.1.0",
 ]
 
 [build-system]
@@ -38,3 +48,7 @@ dev = [
     "mypy>=0.971",
     "pytest>=7.0.1",
 ]
+
+# https://docs.astral.sh/uv/concepts/projects/dependencies/#dependency-sources
+[tool.uv.sources]
+rconx_cli = { path = "packages/rconx_cli" }

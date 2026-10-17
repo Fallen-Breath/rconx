@@ -1,0 +1,45 @@
+[project]
+name = "rconx_cli"
+version = "0.1.0"
+description = "Command-line entry point for rconx"
+
+license = "LGPL-3.0-only"
+license-files = ["LICENSE"]
+readme = "README.md"
+requires-python = ">=3.6"
+authors = [
+    { name = "Fallen_Breath" }
+]
+classifiers = [
+    "Environment :: Console",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "rconx>=0.1.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Fallen-Breath/rconx"
+Issues = "https://github.com/Fallen-Breath/rconx/issues"
+
+[project.scripts]
+rconx = "rconx.cli.main:main"
+
+[build-system]
+# https://packaging.python.org/en/latest/guides/writing-pyproject-toml/#license-and-license-files
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []

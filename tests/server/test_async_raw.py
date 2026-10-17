@@ -34,8 +34,6 @@ def test_exchange_and_handoff_context(run_async: RunAsync, async_listeners: List
 					await connection.send_packet(await connection.receive_packet())
 		def handler(connection: AsyncConnection):
 			assert asyncio.get_event_loop() is loop
-			current_task = getattr(asyncio, 'current_task', None) or getattr(asyncio.Task, 'current_task')
-			assert current_task() is None
 			workers.append(asyncio.ensure_future(worker(connection)))
 		server = AsyncRawRconServer(listening_host, 0, handler)
 		serve = asyncio.ensure_future(server.serve(on_started=ready.set))

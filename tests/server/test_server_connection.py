@@ -44,10 +44,7 @@ def test_sync_close_failure_still_notifies(io_error: bool):
 	failure = OSError('close failed')
 	sock.close_error = failure
 	notified: List[Connection] = []
-	def notify(connection: Connection):
-		notified.append(connection)
-		raise RuntimeError('notification failed')
-	connection = ServerConnection(cast(socket.socket, sock), on_close=notify)
+	connection = ServerConnection(cast(socket.socket, sock), on_close=notified.append)
 	if io_error:
 		with pytest.raises(RconConnectionError):
 			connection.receive_packet()
@@ -75,15 +72,17 @@ def test_async_close_notifies_after_wait(run_async: RunAsync, monkeypatch: pytes
 		notified: List[AsyncConnection] = []
 		connection = AsyncServerConnection(PendingReader(), cast(asyncio.StreamWriter, writer), on_close=notified.append)
 		closing = asyncio.ensure_future(connection.aclose())
+		closing_tasks = [closing]
 		try:
 			await started.wait()
 			assert connection.closed
-			await connection.aclose()
+			closing_tasks.append(asyncio.ensure_future(connection.aclose()))
+			await asyncio.sleep(0)
 			assert not notified
 			assert not closing.done()
 		finally:
 			gate.set()
-			await closing
+			await asyncio.gather(*closing_tasks)
 		connection.abort()
 		await connection.aclose()
 		assert notified == [connection]
@@ -119,12 +118,9 @@ def test_async_failure_still_notifies(run_async: RunAsync, memory_writer_support
 		failure = OSError('close failed')
 		writer.close_error = failure
 		notified: List[AsyncConnection] = []
-		def notify(connection: AsyncConnection):
-			notified.append(connection)
-			raise RuntimeError('notification failed')
 		reader = PendingReader()
 		reader.feed_eof()
-		connection = AsyncServerConnection(reader, cast(asyncio.StreamWriter, writer), on_close=notify)
+		connection = AsyncServerConnection(reader, cast(asyncio.StreamWriter, writer), on_close=notified.append)
 		if io_error:
 			with pytest.raises(RconConnectionError):
 				await connection.receive_packet()

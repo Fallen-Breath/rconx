@@ -913,7 +913,7 @@ wheels = [
 
 [[package]]
 name = "rconx"
-version = "0.1.1b1"
+version = "0.1.1b2"
 source = { editable = "." }
 dependencies = [
     { name = "dataclasses", marker = "python_full_version < '3.7'" },
@@ -961,7 +961,7 @@ dev = [
 
 [[package]]
 name = "rconx-cli"
-version = "0.1.1b1"
+version = "0.1.1b2"
 source = { directory = "packages/rconx_cli" }
 dependencies = [
     { name = "rconx" },

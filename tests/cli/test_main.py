@@ -52,6 +52,14 @@ def test_zero_commands_checks_connection_and_authentication(
 	assert output.err == ''
 
 
+def test_authenticates_with_default_password_variable(client: MagicMock, monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.setenv('RCONX_PASSWORD', 'environment password')
+	monkeypatch.setattr(sys, 'argv', ['rconx', '127.0.0.1:25575', 'list'])
+	main()
+	client.authenticate.assert_called_once_with('environment password', timeout=10.0)
+	client.execute.assert_called_once_with('list', timeout=10.0)
+
+
 def test_explicit_client_configuration(client: MagicMock, create_client: Mock, monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.setattr(sys, 'argv', [
 		'rconx', '-p', 'password', '-P', 'idle_timeout', '--idle-window', '0.25', '--encoding', 'latin1', '-t', '0.75',

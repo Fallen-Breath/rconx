@@ -28,40 +28,54 @@ Addresses use `HOST:PORT`, with brackets around IPv6 addresses: `[IPv6]:PORT`.
 
 All CLI options must appear before the address. Each argument after the address is treated as one complete RCON command, including values such as `--help`. Commands containing spaces need shell quoting.
 
+The CLI reads the password from the `RCONX_PASSWORD` environment variable by default.
+
 The default preset is `minecraft`. These examples show common invocations:
 
 ```sh
 # Execute one command
-rconx -p "your-rcon-password" 127.0.0.1:25575 list
+rconx 127.0.0.1:25575 list
 
 # Execute multiple commands in order
-rconx -p "your-rcon-password" 127.0.0.1:25575 list "say Server maintenance starts soon"
+rconx 127.0.0.1:25575 list "say Server maintenance starts soon"
 
 # Check the connection and authentication
-rconx -p "your-rcon-password" 127.0.0.1:25575
+rconx 127.0.0.1:25575
 
 # Enter interactive mode without startup commands
-rconx -i -p "your-rcon-password" 127.0.0.1:25575
+rconx -i 127.0.0.1:25575
 
 # Connect over IPv6
-rconx -p "your-rcon-password" "[::1]:25575" list
+rconx "[::1]:25575" list
 ```
 
 Commands execute in order on the same authenticated connection. A failure ends the invocation and stops the remaining commands. When interactive mode is disabled, omitting commands checks only the connection and authentication, then exits.
 
-### Authentication
+## Authentication
 
-The CLI requires exactly one password source:
+To set the default password in Bash:
 
-| Option | Password source |
+```sh
+export RCONX_PASSWORD="your-rcon-password"
+```
+
+The password source is selected as follows:
+
+| Password selection | Source |
 | --- | --- |
+| Neither password option is supplied | The value of `RCONX_PASSWORD`. |
 | `-p PASSWORD`, `--password PASSWORD` | The supplied argument. |
 | `--password-env NAME` | The value of the named environment variable. |
 
-The following example reads the password from an existing `RCON_PASSWORD` environment variable:
+On multi-user systems, command-line passwords may be visible to other users through `ps`, so using environment variable is suggested.
+
+The two explicit password options are mutually exclusive. If the selected environment variable is not set, the invocation fails without falling back to another source. Empty strings are allowed as password values.
+
+These examples override the default source. The second reads an existing `MY_RCON_PASSWORD` environment variable:
 
 ```sh
-rconx --password-env RCON_PASSWORD 127.0.0.1:25575 list
+rconx -p "another-rcon-password" 127.0.0.1:25575 list
+rconx --password-env MY_RCON_PASSWORD 127.0.0.1:25575 list
 ```
 
 ## Interactive mode
@@ -69,7 +83,7 @@ rconx --password-env RCON_PASSWORD 127.0.0.1:25575 list
 The `-i` or `--interactive` option enables interactive mode. The CLI first executes any commands supplied on the command line, then reads further commands from standard input. This example executes `list` before entering interactive mode:
 
 ```sh
-rconx -i -p "your-rcon-password" 127.0.0.1:25575 list
+rconx -i 127.0.0.1:25575 list
 ```
 
 The CLI sends each nonempty input line as one command and ignores empty lines. End-of-file ends the invocation. Ctrl+C also exits normally while the CLI is waiting for input.
@@ -88,7 +102,7 @@ The CLI uses separate streams for results and diagnostics:
 The CLI decodes each command result as text and appends a newline when writing it. Output can be redirected to a file:
 
 ```sh
-rconx -p "your-rcon-password" 127.0.0.1:25575 list > players.txt
+rconx 127.0.0.1:25575 list > players.txt
 ```
 
 The `--encoding NAME` option sets the RCON text encoding for passwords, commands, and responses. It defaults to `utf8`. A response that cannot be decoded ends the invocation.
@@ -98,7 +112,7 @@ The `--encoding NAME` option sets the RCON text encoding for passwords, commands
 The `--raw` option writes the collected response bytes without text decoding or added newlines. Results from multiple commands are concatenated without separators. This option cannot be combined with interactive mode.
 
 ```sh
-rconx --raw -p "your-rcon-password" 127.0.0.1:25575 list > response.bin
+rconx --raw 127.0.0.1:25575 list > response.bin
 ```
 
 ## Presets and limits
@@ -108,13 +122,13 @@ rconx --raw -p "your-rcon-password" 127.0.0.1:25575 list > response.bin
 The `-P` or `--preset` option selects how the CLI collects a complete command result. The available presets are `minecraft` (the default), `srcds`, `cuberite`, `single_packet`, and `idle_timeout`. The client guide describes their [collection behavior and server compatibility](client.md#presets-and-server-compatibility).
 
 ```sh
-rconx -P srcds -p "your-rcon-password" 127.0.0.1:27015 status
+rconx -P srcds 127.0.0.1:27015 status
 ```
 
 The `idle_timeout` preset requires the `--idle-window SECONDS` option, which is accepted only with that preset. After the first complete response, this interval sets how long to wait for another response packet to begin. Expiration ends collection, so delayed output can be omitted.
 
 ```sh
-rconx -P idle_timeout --idle-window 0.2 -p "your-rcon-password" 127.0.0.1:27015 status
+rconx -P idle_timeout --idle-window 0.2 127.0.0.1:27015 status
 ```
 
 ### Timeouts
@@ -122,7 +136,7 @@ rconx -P idle_timeout --idle-window 0.2 -p "your-rcon-password" 127.0.0.1:27015 
 The `-t` or `--timeout` option defaults to 10 seconds. It applies to each connection attempt and to the complete authentication exchange. Each command also receives its own timeout budget, covering all response packets.
 
 ```sh
-rconx --timeout 5 -p "your-rcon-password" 127.0.0.1:25575 list
+rconx --timeout 5 127.0.0.1:25575 list
 ```
 
 The value `none` disables the timeout. A timeout of zero expires immediately.
@@ -142,5 +156,5 @@ Packet limits include the length header. The response limit counts command outpu
 This example raises the response limit to 8 MiB:
 
 ```sh
-rconx --max-response-size 8388608 -p "your-rcon-password" 127.0.0.1:25575 list
+rconx --max-response-size 8388608 127.0.0.1:25575 list
 ```

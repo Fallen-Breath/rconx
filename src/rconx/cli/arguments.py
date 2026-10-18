@@ -88,9 +88,9 @@ def parse_args() -> CliOptions:
 		epilog='Each COMMAND is one complete command string. After HOST:PORT, all arguments are commands, including --help, -i and --. '
 			'Without -i, zero commands check the connection and authentication. With -i, interaction follows the startup commands.',
 	)
-	password_source = parser.add_mutually_exclusive_group(required=True)
+	password_source = parser.add_mutually_exclusive_group()
 	password_source.add_argument('-p', '--password', metavar='PASSWORD', help='password; an explicitly empty value is allowed')
-	password_source.add_argument('--password-env', metavar='NAME', help='read the password from environment variable NAME')
+	password_source.add_argument('--password-env', metavar='NAME', help='read the password from environment variable NAME (default source: RCONX_PASSWORD)')
 	parser.add_argument('-P', '--preset', choices=[preset.name for preset in RconPreset], default='minecraft', help='RCON exchange preset (default: %(default)s)')
 	parser.add_argument('-i', '--interactive', action='store_true', help='read commands interactively after the startup commands')
 	parser.add_argument('-t', '--timeout', type=timeout, default=10.0, metavar='SECONDS|none', help='timeout for each connect, authentication or command operation (default: 10 seconds)')
@@ -110,7 +110,11 @@ def parse_args() -> CliOptions:
 		raise ValueError('--idle-window is required and valid only for idle_timeout')
 	if arguments.raw and arguments.interactive:
 		raise ValueError('--raw cannot be combined with --interactive')
-	password = os.environ[arguments.password_env] if arguments.password_env is not None else arguments.password
+	if arguments.password is not None:
+		password = arguments.password
+	else:
+		password_env = arguments.password_env if arguments.password_env is not None else 'RCONX_PASSWORD'
+		password = os.environ[password_env]
 
 	return CliOptions(
 		address=compute_address(arguments.items[0]),

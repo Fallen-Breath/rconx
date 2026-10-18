@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,9 +13,12 @@ else:
 
 
 def run_python(arguments: List[str], directory: Path) -> 'subprocess.CompletedProcess[str]':
+	environment = os.environ.copy()
+	environment.pop('RCONX_PASSWORD', None)
 	return subprocess.run(
 		[sys.executable] + arguments,
 		cwd=str(directory),
+		env=environment,
 		stdout=subprocess.PIPE,
 		stderr=subprocess.PIPE,
 		universal_newlines=True,

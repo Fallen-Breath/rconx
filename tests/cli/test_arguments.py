@@ -8,6 +8,7 @@ from rconx.client.preset import RconPreset
 
 
 def test_defaults_and_zero_commands(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.delenv('RCONX_PASSWORD', raising=False)
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', 'localhost:25575'])
 	options = parse_args()
 	assert options.address.host == 'localhost'
@@ -53,11 +54,12 @@ def test_address_ends_local_option_parsing_and_preserves_commands(monkeypatch: p
 	assert options.timeout == 10.0
 
 
-def test_password_option_after_address_does_not_supply_local_password(monkeypatch: pytest.MonkeyPatch):
+def test_password_option_after_address_remains_a_command(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.setattr(sys, 'argv', ['rconx', 'localhost:25575', '-p', 'secret'])
-	with pytest.raises(SystemExit) as caught:
-		parse_args()
-	assert caught.value.code != 0
+	options = parse_args()
+	assert options.password == 'default secret'
+	assert options.commands == ['-p', 'secret']
 
 
 def test_unknown_local_option_is_rejected(monkeypatch: pytest.MonkeyPatch):
@@ -69,25 +71,39 @@ def test_unknown_local_option_is_rejected(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.mark.parametrize('password', ['', '  中文 secret  ', '-i'])
 def test_password_value_is_preserved(monkeypatch: pytest.MonkeyPatch, password: str):
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.setattr(sys, 'argv', ['rconx', '--password=' + password, 'localhost:25575'])
 	assert parse_args().password == password
 
 
+@pytest.mark.parametrize('default_password', [None, 'default secret'], ids=['no-default', 'default-set'])
 @pytest.mark.parametrize('password', ['environment secret', ''])
-def test_password_from_named_environment_variable(monkeypatch: pytest.MonkeyPatch, password: str):
+def test_password_from_named_environment_variable(monkeypatch: pytest.MonkeyPatch, password: str, default_password: Optional[str]):
+	if default_password is None:
+		monkeypatch.delenv('RCONX_PASSWORD', raising=False)
+	else:
+		monkeypatch.setenv('RCONX_PASSWORD', default_password)
 	monkeypatch.setenv('RCONX_TEST_PASSWORD', password)
 	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-env', 'RCONX_TEST_PASSWORD', 'localhost:25575'])
 	assert parse_args().password == password
 
 
-def test_password_source_is_required(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize('password', ['default secret', ''])
+def test_password_from_default_environment_variable(monkeypatch: pytest.MonkeyPatch, password: str):
+	monkeypatch.setenv('RCONX_PASSWORD', password)
 	monkeypatch.setattr(sys, 'argv', ['rconx', 'localhost:25575'])
-	with pytest.raises(SystemExit) as caught:
+	assert parse_args().password == password
+
+
+def test_missing_default_password_environment_variable_fails(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.delenv('RCONX_PASSWORD', raising=False)
+	monkeypatch.setattr(sys, 'argv', ['rconx', 'localhost:25575'])
+	with pytest.raises(Exception):
 		parse_args()
-	assert caught.value.code != 0
 
 
 def test_password_sources_are_mutually_exclusive(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.setenv('RCONX_TEST_PASSWORD', 'environment secret')
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--password-env', 'RCONX_TEST_PASSWORD', 'localhost:25575'])
 	with pytest.raises(SystemExit) as caught:
@@ -96,10 +112,19 @@ def test_password_sources_are_mutually_exclusive(monkeypatch: pytest.MonkeyPatch
 
 
 def test_undefined_password_environment_variable_fails(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.delenv('RCONX_TEST_PASSWORD', raising=False)
 	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-env', 'RCONX_TEST_PASSWORD', 'localhost:25575'])
 	with pytest.raises(Exception):
 		parse_args()
+
+
+def test_password_environment_option_requires_a_name(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
+	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-env'])
+	with pytest.raises(SystemExit) as caught:
+		parse_args()
+	assert caught.value.code != 0
 
 
 def test_address_is_required(monkeypatch: pytest.MonkeyPatch):

@@ -1,5 +1,6 @@
 import io
 import sys
+from pathlib import Path
 from typing import List
 from unittest.mock import MagicMock, Mock, call
 
@@ -57,6 +58,17 @@ def test_authenticates_with_default_password_variable(client: MagicMock, monkeyp
 	monkeypatch.setattr(sys, 'argv', ['rconx', '127.0.0.1:25575', 'list'])
 	main()
 	client.authenticate.assert_called_once_with('environment password', timeout=10.0)
+	client.execute.assert_called_once_with('list', timeout=10.0)
+
+
+def test_authenticates_with_complete_file_bytes(client: MagicMock, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+	password = b' \xfffirst\r\nsecond\n'
+	password_file = tmp_path / 'password.bin'
+	password_file.write_bytes(password)
+	monkeypatch.delenv('RCONX_PASSWORD', raising=False)
+	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-file', str(password_file), '--encoding', 'utf8', '127.0.0.1:25575', 'list'])
+	main()
+	client.authenticate.assert_called_once_with(password, timeout=10.0)
 	client.execute.assert_called_once_with('list', timeout=10.0)
 
 

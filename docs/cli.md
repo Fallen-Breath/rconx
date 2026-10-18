@@ -63,19 +63,21 @@ The password source is selected as follows:
 
 | Password selection | Source |
 | --- | --- |
-| Neither password option is supplied | The value of `RCONX_PASSWORD`. |
+| No explicit password option is supplied | The value of environment variable `RCONX_PASSWORD`. |
 | `-p PASSWORD`, `--password PASSWORD` | The supplied argument. |
 | `--password-env NAME` | The value of the named environment variable. |
+| `--password-file PATH` | The complete contents of the file as bytes. |
 
 On multi-user systems, command-line passwords may be visible to other users through `ps`, so using environment variable is suggested.
 
-The two explicit password options are mutually exclusive. If the selected environment variable is not set, the invocation fails without falling back to another source. Empty strings are allowed as password values.
+The three explicit password options are mutually exclusive. If the selected environment variable is not set or the selected file cannot be read, the invocation fails without falling back to another source. Empty password strings and empty files are allowed.
 
 These examples override the default source. The second reads an existing `MY_RCON_PASSWORD` environment variable:
 
 ```sh
 rconx -p "another-rcon-password" 127.0.0.1:25575 list
 rconx --password-env MY_RCON_PASSWORD 127.0.0.1:25575 list
+rconx --password-file rcon-password.secret 127.0.0.1:25575 list
 ```
 
 ## Interactive mode
@@ -105,7 +107,7 @@ The CLI decodes each command result as text and appends a newline when writing i
 rconx 127.0.0.1:25575 list > players.txt
 ```
 
-The `--encoding NAME` option sets the RCON text encoding for passwords, commands, and responses. It defaults to `utf8`. A response that cannot be decoded ends the invocation.
+The `--encoding NAME` option sets the RCON text encoding for text passwords, commands, and responses. It defaults to `utf8`. It does not convert file password bytes. A response that cannot be decoded ends the invocation.
 
 ### Raw output
 

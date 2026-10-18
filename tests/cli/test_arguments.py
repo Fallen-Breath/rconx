@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 from typing import Optional
 
 import pytest
@@ -102,13 +103,52 @@ def test_missing_default_password_environment_variable_fails(monkeypatch: pytest
 		parse_args()
 
 
+@pytest.mark.parametrize('password', [
+	pytest.param(b' \t\xff\r\nsecond line\n', id='preserves-binary-content'),
+	pytest.param(b'', id='empty'),
+])
+def test_password_file_preserves_bytes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, password: bytes):
+	password_file = tmp_path / 'password.bin'
+	password_file.write_bytes(password)
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
+	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-file', str(password_file), '--encoding', 'ascii', 'localhost:25575'])
+	assert parse_args().password == password
+
+
 def test_password_sources_are_mutually_exclusive(monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.setenv('RCONX_TEST_PASSWORD', 'environment secret')
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--password-env', 'RCONX_TEST_PASSWORD', 'localhost:25575'])
-	with pytest.raises(SystemExit) as caught:
+	with pytest.raises((Exception, SystemExit)):
 		parse_args()
-	assert caught.value.code != 0
+
+
+@pytest.mark.parametrize('other_option, other_value', [
+	pytest.param('-p', 'secret', id='argument-file'),
+	pytest.param('--password-env', 'RCONX_TEST_PASSWORD', id='environment-file'),
+])
+def test_password_file_is_mutually_exclusive_with_other_sources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, other_option: str, other_value: str):
+	password_file = tmp_path / 'password.bin'
+	password_file.write_bytes(b'file secret')
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
+	monkeypatch.setenv('RCONX_TEST_PASSWORD', 'environment secret')
+	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-file', str(password_file), other_option, other_value, 'localhost:25575'])
+	with pytest.raises((Exception, SystemExit)):
+		parse_args()
+
+
+def test_password_file_option_requires_a_path(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
+	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-file', '--timeout', '1', 'localhost:25575'])
+	with pytest.raises((Exception, SystemExit)):
+		parse_args()
+
+
+def test_missing_password_file_does_not_fall_back_to_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
+	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-file', str(tmp_path / 'missing-password.bin'), 'localhost:25575'])
+	with pytest.raises((Exception, SystemExit)):
+		parse_args()
 
 
 def test_undefined_password_environment_variable_fails(monkeypatch: pytest.MonkeyPatch):

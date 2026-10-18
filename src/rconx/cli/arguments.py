@@ -2,7 +2,8 @@ import argparse
 import dataclasses
 import os
 import sys
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Union
 
 from rconx.client.preset import RconPreset
 from rconx.common.connection_info import ConnectionAddress
@@ -28,7 +29,7 @@ class SizeLimit:
 @dataclasses.dataclass(frozen=True)
 class CliOptions:
 	address: ConnectionAddress
-	password: str = dataclasses.field(repr=False)
+	password: Union[str, bytes] = dataclasses.field(repr=False)
 	commands: List[str]
 	preset: RconPreset
 	interactive: bool
@@ -91,11 +92,12 @@ def parse_args() -> CliOptions:
 	password_source = parser.add_mutually_exclusive_group()
 	password_source.add_argument('-p', '--password', metavar='PASSWORD', help='password; an explicitly empty value is allowed')
 	password_source.add_argument('--password-env', metavar='NAME', help='read the password from environment variable NAME (default source: RCONX_PASSWORD)')
+	password_source.add_argument('--password-file', metavar='PATH', help='read the complete password bytes from file PATH')
 	parser.add_argument('-P', '--preset', choices=[preset.name for preset in RconPreset], default='minecraft', help='RCON exchange preset (default: %(default)s)')
 	parser.add_argument('-i', '--interactive', action='store_true', help='read commands interactively after the startup commands')
 	parser.add_argument('-t', '--timeout', type=timeout, default=10.0, metavar='SECONDS|none', help='timeout for each connect, authentication or command operation (default: 10 seconds)')
 	parser.add_argument('--idle-window', type=seconds, metavar='SECONDS', help='response quiet window; required and valid only for the idle_timeout preset')
-	parser.add_argument('--encoding', metavar='NAME', help='password, command and response text encoding (default: core utf8)')
+	parser.add_argument('--encoding', metavar='NAME', help='text password, command and response encoding (default: core utf8)')
 	parser.add_argument('--raw', action='store_true', help='write response bytes; incompatible with -i')
 	parser.add_argument('--max-send-packet-size', type=size_limit, metavar='BYTES|none', help='send packet size limit; none disables it (default: selected preset)')
 	parser.add_argument('--max-receive-packet-size', type=size_limit, metavar='BYTES|none', help='receive packet size limit; none disables it (default: core limit)')
@@ -110,8 +112,11 @@ def parse_args() -> CliOptions:
 		raise ValueError('--idle-window is required and valid only for idle_timeout')
 	if arguments.raw and arguments.interactive:
 		raise ValueError('--raw cannot be combined with --interactive')
+	password: Union[str, bytes]
 	if arguments.password is not None:
 		password = arguments.password
+	elif arguments.password_file is not None:
+		password = Path(arguments.password_file).read_bytes()
 	else:
 		password_env = arguments.password_env if arguments.password_env is not None else 'RCONX_PASSWORD'
 		password = os.environ[password_env]

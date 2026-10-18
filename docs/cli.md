@@ -18,18 +18,33 @@ python -m rconx --help
 
 ## Running commands
 
-The following example connects to a Minecraft server, authenticates, and executes `list`. The default preset is `minecraft`.
+The command format is:
 
-```sh
-rconx -p "your-rcon-password" 127.0.0.1:25575 list
+```text
+rconx [OPTIONS] HOST:PORT [COMMAND ...]
 ```
 
 Addresses use `HOST:PORT`, with brackets around IPv6 addresses: `[IPv6]:PORT`.
 
-All CLI options must appear before the address. Each argument after the address is treated as one complete RCON command, including values such as `--help`. Commands containing spaces need shell quoting:
+All CLI options must appear before the address. Each argument after the address is treated as one complete RCON command, including values such as `--help`. Commands containing spaces need shell quoting.
+
+The default preset is `minecraft`. These examples show common invocations:
 
 ```sh
+# Execute one command
+rconx -p "your-rcon-password" 127.0.0.1:25575 list
+
+# Execute multiple commands in order
 rconx -p "your-rcon-password" 127.0.0.1:25575 list "say Server maintenance starts soon"
+
+# Check the connection and authentication
+rconx -p "your-rcon-password" 127.0.0.1:25575
+
+# Enter interactive mode without startup commands
+rconx -i -p "your-rcon-password" 127.0.0.1:25575
+
+# Connect over IPv6
+rconx -p "your-rcon-password" "[::1]:25575" list
 ```
 
 Commands execute in order on the same authenticated connection. A failure ends the invocation and stops the remaining commands. When interactive mode is disabled, omitting commands checks only the connection and authentication, then exits.

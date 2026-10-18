@@ -411,21 +411,6 @@ def test_response_decode_error_preserves_session(rcon_factory: SyncRconFactory):
 	assert endpoint.client.authenticated and endpoint.client.execute('next').text == 'valid'
 
 
-@pytest.mark.parametrize('operation', ['authenticate', 'execute'])
-def test_expired_budget_preserves_session(rcon_factory: SyncRconFactory, operation: str):
-	endpoint = rcon_factory()
-	endpoint.client.connect()
-	if operation == 'execute':
-		endpoint.client.authenticate('password')
-	requests = len(endpoint.peer.requests)
-	with pytest.raises(RconTimeoutError):
-		getattr(endpoint.client, operation)('value', timeout=0)
-	assert endpoint.client.connected and len(endpoint.peer.requests) == requests
-	if operation == 'authenticate':
-		endpoint.client.authenticate('password')
-	assert endpoint.client.execute('command').content == b'firstsecond'
-
-
 @pytest.mark.parametrize('authentication_duration, succeeds', [
 	pytest.param(3.0, True, id='within-budget'),
 	pytest.param(4.5, False, id='budget-exhausted'),

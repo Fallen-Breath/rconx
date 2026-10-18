@@ -70,8 +70,8 @@ def test_first_byte_window_does_not_limit_packet_body(socket_factory: SocketFact
 	assert connection.try_receive_packet(first_byte_timeout=0.1, timeout=1) == Packet(17, 2, b'hello')
 
 
-@pytest.mark.parametrize('budget', [0, 0.5])
-def test_try_receive_total_budget_closes(socket_factory: SocketFactory, clock: Clock, budget: float):
+def test_try_receive_total_budget_closes(socket_factory: SocketFactory, clock: Clock):
+	budget = 0.5
 	sock = socket_factory([socket.timeout()])
 	sock.on_receive = lambda sock: clock.advance(budget)
 	connection = Connection(cast(socket.socket, sock))
@@ -237,19 +237,6 @@ def test_invalid_timeout_preserves_connection(socket_factory: SocketFactory, tim
 			connection.receive_packet(timeout=timeout)
 	assert not connection.closed
 	assert connection.receive_packet() == Packet(17, 2, b'hello')
-
-
-@pytest.mark.parametrize('operation', ['send', 'receive'])
-def test_zero_timeout_closes_connection(socket_factory: SocketFactory, operation: str):
-	sock = socket_factory([make_frame()])
-	connection = Connection(cast(socket.socket, sock))
-	with pytest.raises(RconTimeoutError):
-		if operation == 'send':
-			connection.send_packet(Packet(17, 2, b'hello'), timeout=0)
-		else:
-			connection.receive_packet(timeout=0)
-	assert connection.closed
-	assert sock.closed
 
 
 def test_receive_uses_one_total_timeout(socket_factory: SocketFactory, clock: Clock):

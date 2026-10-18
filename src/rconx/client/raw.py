@@ -42,7 +42,7 @@ class RawRconClient:
 		"""
 		Establish a TCP connection to the configured target
 
-		:keyword timeout: Timeout per connection attempt in seconds. ``None`` disables the timeout; ``0`` fails immediately
+		:keyword timeout: Timeout per connection attempt in seconds. ``None`` disables the timeout
 		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
 		"""
 		if self.__connection is not None and not self.__connection.closed:
@@ -80,7 +80,7 @@ class RawRconClient:
 		Send a complete RCON packet
 
 		:param packet: The packet to send
-		:keyword timeout: Total timeout in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword timeout: Total timeout in seconds. ``None`` disables the timeout
 		"""
 		self.__get_connection().send_packet(packet, timeout=timeout)
 
@@ -88,7 +88,7 @@ class RawRconClient:
 		"""
 		Receive the next complete RCON packet
 
-		:keyword timeout: Total timeout in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword timeout: Total timeout in seconds. ``None`` disables the timeout
 		:return: The received packet
 		"""
 		return self.__get_connection().receive_packet(timeout=timeout)
@@ -97,10 +97,10 @@ class RawRconClient:
 		"""
 		Receive a packet, allowing the first-byte wait to end without closing the connection
 
-		Once a packet starts, receive failures close the connection. Exhausting the total budget also closes it.
+		After the first byte arrives, the call waits for the complete packet. Receive failures and exhaustion of the total timeout close the connection.
 
-		:keyword first_byte_timeout: Required finite non-negative first-byte waiting time in seconds; ``0`` checks immediately
-		:keyword timeout: Total receive budget in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword first_byte_timeout: First-byte waiting time in seconds. ``0`` checks for an available first byte without waiting
+		:keyword timeout: Total receive budget in seconds. ``None`` disables the timeout
 		:return: The received packet, or ``None`` if the first-byte wait expires while the total budget remains
 		"""
 		return self.__get_connection().try_receive_packet(first_byte_timeout=first_byte_timeout, timeout=timeout)
@@ -201,9 +201,9 @@ class AsyncRawRconClient:
 		"""
 		Receive a packet, allowing the first-byte wait to end without closing the connection
 
-		Receive failures and caller cancellation close the connection.
+		After the first byte arrives, the call waits for the complete packet. Receive failures and caller cancellation close the connection.
 
-		:keyword first_byte_timeout: Required finite non-negative first-byte waiting time in seconds; ``0`` checks immediately
+		:keyword first_byte_timeout: First-byte waiting time in seconds. ``0`` checks for an available first byte without waiting
 		:return: The received packet, or ``None`` if the first-byte wait expires before a packet starts
 		"""
 		return await self.__get_connection().try_receive_packet(first_byte_timeout=first_byte_timeout)

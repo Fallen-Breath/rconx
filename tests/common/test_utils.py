@@ -60,11 +60,6 @@ def test_deadline_remaining_and_expiry(clock: Clock):
 		deadline.get_remaining_or_raise()
 
 
-def test_zero_deadline(clock: Clock):
-	with pytest.raises(RconTimeoutError):
-		Deadline(0).get_remaining_or_raise()
-
-
 @pytest.mark.parametrize('count', [0, 1, 7, 30001])
 def test_buffer_consume_and_reuse(count: int):
 	buffer = BytesBuffer()

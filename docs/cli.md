@@ -141,7 +141,7 @@ The `-t` or `--timeout` option defaults to 10 seconds. It applies to each connec
 rconx --timeout 5 127.0.0.1:25575 list
 ```
 
-The value `none` disables the timeout. A timeout of zero expires immediately.
+The value `none` disables the timeout.
 
 ### Size limits
 

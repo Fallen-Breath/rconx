@@ -210,7 +210,7 @@ server = RconServer(
 
 ### Communication timeouts
 
-Timeout settings are in seconds. `None` disables a timeout, and zero expires immediately. Expiration closes the affected connection.
+Timeout settings are in seconds. `None` disables a timeout. Expiration closes the affected connection.
 
 | Setting | Default | Scope |
 | --- | --- | --- |

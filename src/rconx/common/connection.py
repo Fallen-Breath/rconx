@@ -77,7 +77,7 @@ class Connection(__BaseConnection):
 		Send a complete RCON packet
 
 		:param packet: The packet to send
-		:keyword timeout: Total timeout in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword timeout: Total timeout in seconds. ``None`` disables the timeout
 		"""
 		deadline = Deadline(timeout)
 		sock = self.__get_socket()
@@ -98,7 +98,7 @@ class Connection(__BaseConnection):
 		"""
 		Receive the next complete RCON packet
 
-		Timeouts are in seconds; ``None`` disables a budget and ``0`` expires immediately.
+		Timeouts are in seconds. ``None`` disables the corresponding timeout.
 		Phase budgets cannot extend the total timeout. Receive failures, including timeouts, close the connection.
 
 		:keyword timeout: Total receive budget
@@ -128,10 +128,10 @@ class Connection(__BaseConnection):
 		"""
 		Receive a packet, allowing the first-byte wait to end without closing the connection
 
-		Once a packet starts, receive failures close the connection. Exhausting the total budget also closes it.
+		After the first byte arrives, the call waits for the complete packet. Receive failures and exhaustion of the total timeout close the connection.
 
-		:keyword first_byte_timeout: Required finite non-negative first-byte waiting time in seconds; ``0`` checks immediately
-		:keyword timeout: Total receive budget in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword first_byte_timeout: First-byte waiting time in seconds. ``0`` checks for an available first byte without waiting
+		:keyword timeout: Total receive budget in seconds. ``None`` disables the timeout
 		:return: The received packet, or ``None`` if the first-byte wait expires while the total budget remains
 		"""
 		if first_byte_timeout is None:
@@ -267,7 +267,7 @@ class AsyncConnection(__BaseConnection):
 		"""
 		Receive the next complete RCON packet
 
-		Timeouts are in seconds; ``None`` disables a budget and ``0`` expires immediately.
+		Timeouts are in seconds. ``None`` disables the corresponding timeout.
 		Phase budgets cannot extend the total timeout. Receive failures, timeouts and caller cancellation close the connection.
 
 		:keyword timeout: Total receive budget
@@ -300,9 +300,9 @@ class AsyncConnection(__BaseConnection):
 		"""
 		Receive a packet, allowing the first-byte wait to end without closing the connection
 
-		Receive failures and caller cancellation close the connection.
+		After the first byte arrives, the call waits for the complete packet. Receive failures and caller cancellation close the connection.
 
-		:keyword first_byte_timeout: Required finite non-negative first-byte waiting time in seconds; ``0`` checks immediately
+		:keyword first_byte_timeout: First-byte waiting time in seconds. ``0`` checks for an available first byte without waiting
 		:return: The received packet, or ``None`` if the first-byte wait expires before a packet starts
 		"""
 		if first_byte_timeout is None:

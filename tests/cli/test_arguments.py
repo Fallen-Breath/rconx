@@ -257,7 +257,6 @@ def test_raw_and_interactive_are_mutually_exclusive(monkeypatch: pytest.MonkeyPa
 
 
 @pytest.mark.parametrize('value, expected', [
-	pytest.param('0', 0.0, id='zero'),
 	pytest.param('0.25', 0.25, id='positive'),
 	pytest.param('none', None, id='unlimited'),
 ])

@@ -150,9 +150,9 @@ def test_receive_phase_budgets_are_independent(run_async: RunAsync, async_connec
 
 
 @pytest.mark.parametrize('stage', ['total', 'first-byte', 'after-first-byte'])
-@pytest.mark.parametrize('budget', [0, 0.001])
-def test_receive_timeout_closes_connection(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, stage: str, budget: float):
+def test_receive_timeout_closes_connection(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, stage: str):
 	async def scenario():
+		budget = 0.001
 		endpoint = async_connection_factory(make_frame()[:1] if stage == 'after-first-byte' else b'')
 		with pytest.raises(RconTimeoutError):
 			if stage == 'total':

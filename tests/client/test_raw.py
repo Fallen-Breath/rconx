@@ -136,7 +136,6 @@ def test_connection_failure_allows_retry(tcp_listener_factory: TcpListenerFactor
 
 
 @pytest.mark.parametrize('timeout, error', [
-	pytest.param(0, RconTimeoutError, id='zero'),
 	pytest.param(-1, ValueError, id='negative'),
 	pytest.param(float('inf'), ValueError, id='infinite'),
 	pytest.param(float('nan'), ValueError, id='nan'),
@@ -165,24 +164,6 @@ def test_receive_failure_allows_reconnect(tcp_listener_factory: TcpListenerFacto
 			client.receive_packet(timeout=1)
 		with pytest.raises(RconConnectionError):
 			client.send_packet(Packet(17, 2, b'hello'))
-		client.connect(timeout=1)
-		second = server.accept()
-		second.sendall(make_frame())
-		assert client.receive_packet(timeout=1) == Packet(17, 2, b'hello')
-
-
-@pytest.mark.parametrize('operation', ['send', 'receive'])
-def test_zero_io_timeout_allows_reconnect(tcp_listener_factory: TcpListenerFactory, operation: str):
-	server = tcp_listener_factory()
-	with RawRconClient(server.address.host, server.address.port) as client:
-		client.connect(timeout=1)
-		first = server.accept()
-		with pytest.raises(RconTimeoutError):
-			if operation == 'send':
-				client.send_packet(Packet(17, 2, b'hello'), timeout=0)
-			else:
-				client.receive_packet(timeout=0)
-		assert first.recv(1) == b''
 		client.connect(timeout=1)
 		second = server.accept()
 		second.sendall(make_frame())

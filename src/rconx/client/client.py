@@ -247,7 +247,7 @@ class RconClient(_BaseRconClient):
 		"""
 		Establish a TCP connection to the configured target
 
-		:keyword timeout: Timeout per connection attempt in seconds. ``None`` disables the timeout; ``0`` fails immediately
+		:keyword timeout: Timeout per connection attempt in seconds. ``None`` disables the timeout
 		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
 		"""
 		self._ensure_disconnected()
@@ -260,7 +260,7 @@ class RconClient(_BaseRconClient):
 		Authenticate the connected session
 
 		:param password: Password bytes or text encoded with the client's configured encoding; null bytes are not allowed
-		:keyword timeout: Total authentication budget in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword timeout: Total authentication budget in seconds. ``None`` disables the timeout
 		"""
 		deadline = Deadline(timeout)
 		self._ensure_authenticatable()
@@ -275,7 +275,7 @@ class RconClient(_BaseRconClient):
 		Establish an authenticated connection to the configured target
 
 		:param password: Password bytes or text encoded with the client's configured encoding; null bytes are not allowed
-		:keyword timeout: Shared connection and authentication budget in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword timeout: Shared connection and authentication budget in seconds. ``None`` disables the timeout
 		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
 		"""
 		deadline = Deadline(timeout)
@@ -288,7 +288,7 @@ class RconClient(_BaseRconClient):
 		Execute a command on the authenticated session and collect its response using the selected preset
 
 		:param command: Command bytes or text encoded with the client's configured encoding; null bytes are not allowed
-		:keyword timeout: Total command exchange budget in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword timeout: Total command exchange budget in seconds. ``None`` disables the timeout
 		:return: Collected response payload with access to its decoded text
 		"""
 		deadline = Deadline(timeout)

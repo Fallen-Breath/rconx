@@ -10,7 +10,7 @@ class RconServerOptions(RawRconServerOptions):
 	Options for high-level RCON servers, including ``RawRconServerOptions``
 
 	Both packet-size limits default to 4100 bytes, including the length header.
-	Timeouts are in seconds; ``None`` disables them and ``0`` expires immediately.
+	Timeouts are in seconds. ``None`` disables the corresponding timeout.
 	"""
 
 	max_connections: NotRequired[Optional[int]]

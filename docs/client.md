@@ -142,7 +142,7 @@ Candidate entries indicate that the preset's suitability for that server is not 
 
 `connect_and_authenticate` uses the time remaining after connecting for authentication. Connection establishment retains the timeout scope of `connect`.
 
-The default `None` disables the timeout. A timeout of zero expires immediately. Receiving another packet does not renew an authentication or command timeout.
+The default `None` disables the timeout. Receiving another packet does not renew an authentication or command timeout.
 
 ```python
 response = client.execute("list", timeout=5)

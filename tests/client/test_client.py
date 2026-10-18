@@ -426,6 +426,31 @@ def test_expired_budget_preserves_session(rcon_factory: SyncRconFactory, operati
 	assert endpoint.client.execute('command').content == b'firstsecond'
 
 
+@pytest.mark.parametrize('authentication_duration, succeeds', [
+	pytest.param(3.0, True, id='within-budget'),
+	pytest.param(4.5, False, id='budget-exhausted'),
+])
+def test_connect_and_authenticate_shares_timeout_budget(
+	rcon_factory: SyncRconFactory, clock: Clock, monkeypatch: pytest.MonkeyPatch, authentication_duration: float, succeeds: bool,
+):
+	endpoint = rcon_factory()
+	create_connection = socket.create_connection
+
+	def connect(*args: Any, **kwargs: Any) -> socket.socket:
+		sock = create_connection(*args, **kwargs)
+		clock.advance(1)
+		endpoint.socket.on_send = lambda sock: clock.advance(authentication_duration)
+		return sock
+
+	monkeypatch.setattr(socket, 'create_connection', connect)
+	if succeeds:
+		endpoint.client.connect_and_authenticate('password', timeout=5)
+		assert endpoint.client.authenticated
+	else:
+		with pytest.raises(RconTimeoutError):
+			endpoint.client.connect_and_authenticate('password', timeout=5)
+
+
 def test_command_uses_one_total_budget(rcon_factory: SyncRconFactory, clock: Clock):
 	endpoint = rcon_factory(RconPreset.srcds)
 	endpoint.client.connect()

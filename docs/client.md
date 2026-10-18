@@ -12,8 +12,7 @@ The following examples connect to a Minecraft server and execute a command.
 from rconx import RconClient, RconPreset
 
 with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
-	client.connect()
-	client.authenticate("your-rcon-password")
+	client.connect_and_authenticate("your-rcon-password")
 	response = client.execute("list")
 	print(response.text)
 ```
@@ -28,8 +27,7 @@ from rconx import AsyncRconClient, RconPreset
 
 async def main():
 	async with AsyncRconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
-		await client.connect()
-		await client.authenticate("your-rcon-password")
+		await client.connect_and_authenticate("your-rcon-password")
 		response = await client.execute("list")
 		print(response.text)
 
@@ -40,6 +38,8 @@ asyncio.run(main())
 The shorter high-level examples below use an authenticated `RconClient` named `client` unless they create a client.
 
 ### Client state and lifetime
+
+Call `connect_and_authenticate` on a disconnected client to establish an authenticated connection. Use `connect` and `authenticate` to manage connection and authentication separately.
 
 `RconClient` and `AsyncRconClient` expose these read-only properties:
 
@@ -137,7 +137,10 @@ Candidate entries indicate that the preset's suitability for that server is not 
 | --- | --- |
 | `connect` | Each underlying connection attempt. |
 | `authenticate` | The complete authentication operation. |
+| `connect_and_authenticate` | A shared connection and authentication budget. |
 | `execute` | The complete command exchange, including all response packets. |
+
+`connect_and_authenticate` uses the time remaining after connecting for authentication. Connection establishment retains the timeout scope of `connect`.
 
 The default `None` disables the timeout. A timeout of zero expires immediately. Receiving another packet does not renew an authentication or command timeout.
 
@@ -186,7 +189,7 @@ Argument and size validation can also raise `TypeError` or `ValueError`. Caller-
 | Failure | Client state |
 | --- | --- |
 | A connection attempt fails. | Disconnected and unauthenticated. |
-| A call is rejected before communication begins. | The existing state is preserved. |
+| An `authenticate` or `execute` call is rejected before its exchange begins. | The existing state is preserved. |
 | An authentication or command exchange fails. | The connection closes and authentication is cleared. |
 
 After a communication failure, the same client can connect and authenticate again. rconx does not automatically reconnect or resend commands. A command may have executed before its response was lost, so the application decides whether repeating it is appropriate.
@@ -199,8 +202,7 @@ from rconx import RconConnectionError
 try:
 	client.execute("list")
 except RconConnectionError:
-	client.connect()
-	client.authenticate("your-rcon-password")
+	client.connect_and_authenticate("your-rcon-password")
 ```
 
 ## Low-level clients

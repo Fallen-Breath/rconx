@@ -28,8 +28,7 @@ These examples execute `list` on a Minecraft server with RCON enabled.
 from rconx import RconClient, RconPreset
 
 with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
-	client.connect()
-	client.authenticate("your-rcon-password")
+	client.connect_and_authenticate("your-rcon-password")
 	response = client.execute("list")
 	print(response.text)
 ```
@@ -44,8 +43,7 @@ from rconx import AsyncRconClient, RconPreset
 
 async def main():
 	async with AsyncRconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
-		await client.connect()
-		await client.authenticate("your-rcon-password")
+		await client.connect_and_authenticate("your-rcon-password")
 		response = await client.execute("list")
 		print(response.text)
 

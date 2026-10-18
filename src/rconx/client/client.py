@@ -270,6 +270,18 @@ class RconClient(_BaseRconClient):
 			self._authentication_handler.authenticate(context, payload)
 		self._mark_authenticated()
 
+	def connect_and_authenticate(self, password: Union[str, bytes], *, timeout: Optional[float] = None, local_address: Optional[LocalAddress] = None):
+		"""
+		Establish an authenticated connection to the configured target
+
+		:param password: Password bytes or text encoded with the client's configured encoding; null bytes are not allowed
+		:keyword timeout: Shared connection and authentication budget in seconds. ``None`` disables the timeout; ``0`` expires immediately
+		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
+		"""
+		deadline = Deadline(timeout)
+		self.connect(timeout=deadline.get_remaining_or_raise(), local_address=local_address)
+		self.authenticate(password, timeout=deadline.get_remaining_or_raise())
+
 	@_exclusive_operation
 	def execute(self, command: Union[str, bytes], *, timeout: Optional[float] = None) -> RconContent:
 		"""
@@ -398,6 +410,16 @@ class AsyncRconClient(_BaseRconClient):
 		async with self.__operation() as context:
 			await self._authentication_handler.authenticate_async(context, payload)
 		self._mark_authenticated()
+
+	async def connect_and_authenticate(self, password: Union[str, bytes], *, local_address: Optional[LocalAddress] = None):
+		"""
+		Establish an authenticated connection to the configured target
+
+		:param password: Password bytes or text encoded with the client's configured encoding; null bytes are not allowed
+		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
+		"""
+		await self.connect(local_address=local_address)
+		await self.authenticate(password)
 
 	@_exclusive_operation
 	async def execute(self, command: Union[str, bytes]) -> RconContent:

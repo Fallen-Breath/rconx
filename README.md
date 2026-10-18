@@ -4,7 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/rconx.svg)](https://pypi.org/project/rconx/)
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](#installation)
 
-rconx is a Python library for communicating with TCP servers [that use the Source RCON packet format](https://developer.valvesoftware.com/wiki/Source_RCON_Protocol). It provides synchronous and asynchronous clients for authentication and command execution, together with servers for exposing an application's own command handlers over RCON.
+rconx is a Python library for communicating with TCP servers that use the [Source RCON](https://developer.valvesoftware.com/wiki/Source_RCON_Protocol) packet format. It provides synchronous and asynchronous clients for authentication and command execution, together with servers for exposing an application's own command handlers over RCON.
 
 The clients collect command results using selectable presets, including SRCDS, Minecraft, and Cuberite. Low-level clients and servers are available for applications that need to exchange individual RCON packets. The command-line interface executes commands from a terminal or script.
 

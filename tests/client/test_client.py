@@ -52,12 +52,9 @@ def test_tcp_preset_exchange(tcp_listener_factory: TcpListenerFactory, preset: R
 
 @pytest.mark.parametrize('preset', list(RconPreset))
 @pytest.mark.parametrize('output', [[b'first', b'', b'second'], [b'']])
-@pytest.mark.parametrize('auth_prefix', [False, True])
-def test_presets_collect_complete_results(rcon_factory: SyncRconFactory, preset: RconPreset, output: List[bytes], auth_prefix: bool):
+def test_presets_collect_complete_results(rcon_factory: SyncRconFactory, preset: RconPreset, output: List[bytes]):
 	endpoint = rcon_factory(preset)
 	endpoint.peer.output = output
-	if auth_prefix:
-		endpoint.peer.auth_replies.insert(0, PacketReply())
 	client = endpoint.client
 	assert not client.connected and not client.authenticated
 	client.connect()
@@ -75,6 +72,24 @@ def test_presets_collect_complete_results(rcon_factory: SyncRconFactory, preset:
 	assert commands[0].request_id != commands[1].request_id
 
 
+@pytest.mark.parametrize('preset', list(RconPreset))
+@pytest.mark.parametrize('prefixes', [
+	pytest.param([], id='no-prefix'),
+	pytest.param([b''], id='empty-prefix'),
+	pytest.param([b'notice'], id='nonempty-prefix'),
+	pytest.param([b'', b''], id='empty-prefixes'),
+	pytest.param([b'notice-1', b'', b'notice-2'], id='mixed-prefixes'),
+])
+def test_authentication_accepts_response_values(rcon_factory: SyncRconFactory, preset: RconPreset, prefixes: List[bytes]):
+	endpoint = rcon_factory(preset)
+	endpoint.peer.auth_replies = [PacketReply(payload) for payload in prefixes] + [PacketReply(packet_type=2)]
+	client = endpoint.client
+	client.connect()
+	client.authenticate('password')
+	assert client.connected and client.authenticated
+	assert client.execute('command').content == b'firstsecond'
+
+
 @pytest.mark.parametrize('result_before_ack', [False, True])
 def test_cuberite_accepts_both_reply_orders(rcon_factory: SyncRconFactory, result_before_ack: bool):
 	endpoint = rcon_factory(RconPreset.cuberite)
@@ -88,12 +103,17 @@ def test_cuberite_accepts_both_reply_orders(rcon_factory: SyncRconFactory, resul
 @pytest.mark.parametrize('replies, error', [
 	pytest.param([PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected'),
 	pytest.param([PacketReply(), PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected-after-prefix'),
+	pytest.param([PacketReply(b'notice'), PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected-after-nonempty-prefix'),
+	pytest.param([PacketReply(), PacketReply(), PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected-after-empty-prefixes'),
+	pytest.param(
+		[PacketReply(b'first'), PacketReply(), PacketReply(b'second'), PacketReply(packet_type=2, request_id=-1)],
+		RconAuthenticationError, id='rejected-after-mixed-prefixes',
+	),
 	pytest.param([PacketReply(packet_type=2, id_offset=1)], RconProtocolError, id='wrong-result-id'),
 	pytest.param([PacketReply(b'bad', 2)], RconProtocolError, id='nonempty-result'),
 	pytest.param([PacketReply(packet_type=7)], RconProtocolError, id='wrong-type'),
-	pytest.param([PacketReply(b'bad')], RconProtocolError, id='nonempty-prefix'),
 	pytest.param([PacketReply(id_offset=1)], RconProtocolError, id='wrong-prefix-id'),
-	pytest.param([PacketReply(), PacketReply(), PacketReply(packet_type=2)], RconProtocolError, id='duplicate-prefix'),
+	pytest.param([PacketReply(b'notice'), PacketReply(b'other', id_offset=1)], RconProtocolError, id='wrong-later-prefix-id'),
 ])
 def test_authentication_failure_closes_and_allows_retry(rcon_factory: SyncRconFactory, replies: List[PacketReply], error: Type[BaseException]):
 	endpoint = rcon_factory()

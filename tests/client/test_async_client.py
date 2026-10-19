@@ -100,7 +100,7 @@ def test_cancelled_operation_closes_and_allows_retry(run_async: RunAsync, async_
 			started = endpoint.writer.drain_started
 		else:
 			if operation == 'authenticate':
-				endpoint.peer.auth_replies = []
+				endpoint.peer.auth_replies = [PacketReply(b'first'), PacketReply(), PacketReply(b'second')]
 			else:
 				endpoint.peer.command_replies = []
 			endpoint.reader.pending.clear()
@@ -108,6 +108,8 @@ def test_cancelled_operation_closes_and_allows_retry(run_async: RunAsync, async_
 
 		task = asyncio.ensure_future(getattr(client, operation)('value'))
 		await started.wait()
+		if operation == 'authenticate' and stage == 'receive':
+			assert not task.done() and not client.authenticated
 		task.cancel()
 		with pytest.raises(asyncio.CancelledError):
 			await task
@@ -298,13 +300,10 @@ def test_tcp_preset_exchange(run_async: RunAsync, tcp_listener_factory: TcpListe
 
 @pytest.mark.parametrize('preset', list(RconPreset))
 @pytest.mark.parametrize('output', [[b'first', b'', b'second'], [b'']])
-@pytest.mark.parametrize('auth_prefix', [False, True])
-def test_presets_collect_complete_results(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset, output: List[bytes], auth_prefix: bool):
+def test_presets_collect_complete_results(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset, output: List[bytes]):
 	async def scenario():
 		endpoint = async_rcon_factory(preset)
 		endpoint.peer.output = output
-		if auth_prefix:
-			endpoint.peer.auth_replies.insert(0, PacketReply())
 		client = endpoint.client
 		assert not client.connected and not client.authenticated
 		await client.connect()
@@ -324,6 +323,27 @@ def test_presets_collect_complete_results(run_async: RunAsync, async_rcon_factor
 	run_async(scenario())
 
 
+@pytest.mark.parametrize('preset', list(RconPreset))
+@pytest.mark.parametrize('prefixes', [
+	pytest.param([], id='no-prefix'),
+	pytest.param([b''], id='empty-prefix'),
+	pytest.param([b'notice'], id='nonempty-prefix'),
+	pytest.param([b'', b''], id='empty-prefixes'),
+	pytest.param([b'notice-1', b'', b'notice-2'], id='mixed-prefixes'),
+])
+def test_authentication_accepts_response_values(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset, prefixes: List[bytes]):
+	async def scenario():
+		endpoint = async_rcon_factory(preset)
+		endpoint.peer.auth_replies = [PacketReply(payload) for payload in prefixes] + [PacketReply(packet_type=2)]
+		client = endpoint.client
+		await client.connect()
+		await client.authenticate('password')
+		assert client.connected and client.authenticated
+		assert (await client.execute('command')).content == b'firstsecond'
+
+	run_async(scenario())
+
+
 @pytest.mark.parametrize('result_before_ack', [False, True])
 def test_cuberite_accepts_both_reply_orders(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, result_before_ack: bool):
 	async def scenario():
@@ -339,13 +359,15 @@ def test_cuberite_accepts_both_reply_orders(run_async: RunAsync, async_rcon_fact
 
 @pytest.mark.parametrize('replies, error', [
 	pytest.param([PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected'),
-	pytest.param([PacketReply(), PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected-after-prefix'),
+	pytest.param([PacketReply(), PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected-after-empty-prefix'),
+	pytest.param([PacketReply(b'notice'), PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected-after-nonempty-prefix'),
+	pytest.param([PacketReply(), PacketReply(), PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected-after-empty-prefixes'),
+	pytest.param([PacketReply(b'first'), PacketReply(), PacketReply(b'second'), PacketReply(packet_type=2, request_id=-1)], RconAuthenticationError, id='rejected-after-mixed-prefixes'),
 	pytest.param([PacketReply(packet_type=2, id_offset=1)], RconProtocolError, id='wrong-result-id'),
 	pytest.param([PacketReply(b'bad', 2)], RconProtocolError, id='nonempty-result'),
 	pytest.param([PacketReply(packet_type=7)], RconProtocolError, id='wrong-type'),
-	pytest.param([PacketReply(b'bad')], RconProtocolError, id='nonempty-prefix'),
 	pytest.param([PacketReply(id_offset=1)], RconProtocolError, id='wrong-prefix-id'),
-	pytest.param([PacketReply(), PacketReply(), PacketReply(packet_type=2)], RconProtocolError, id='duplicate-prefix'),
+	pytest.param([PacketReply(b'first'), PacketReply(b'second', id_offset=1)], RconProtocolError, id='wrong-later-prefix-id'),
 ])
 def test_authentication_failure_closes_and_allows_retry(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, replies: List[PacketReply], error: Type[BaseException]):
 	async def scenario():

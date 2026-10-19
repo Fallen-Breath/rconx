@@ -121,16 +121,10 @@ rconx --raw 127.0.0.1:25575 list > response.bin
 
 ### Presets
 
-The `-P` or `--preset` option selects how the CLI collects a complete command result. The available presets are `minecraft` (the default), `srcds`, `cuberite`, `single_packet`, and `idle_timeout`. The client guide describes their [collection behavior and server compatibility](client.md#presets-and-server-compatibility).
+The `-P` or `--preset` option selects how the CLI collects a complete command result and defaults to `minecraft`. The client guide describes [collection behavior and tested server versions](client.md#presets-and-server-compatibility).
 
 ```sh
 rconx -P srcds 127.0.0.1:27015 status
-```
-
-The `idle_timeout` preset requires the `--idle-window SECONDS` option, which is accepted only with that preset. After the first complete response, this interval sets how long to wait for another response packet to begin. Expiration ends collection, so delayed output can be omitted.
-
-```sh
-rconx -P idle_timeout --idle-window 0.2 127.0.0.1:27015 status
 ```
 
 ### Timeouts

@@ -17,6 +17,3 @@ class RconPreset(Enum):
 
 	single_packet = auto()
 	"""Servers: Factorio, ARK: Survival Evolved, Conan Exiles (untested). Requires the complete result in one type-0 packet."""
-
-	idle_timeout = auto()
-	"""Servers: Project Zomboid (untested). Uses a quiet window between response packets; completion is heuristic."""

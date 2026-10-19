@@ -74,15 +74,14 @@ def test_authenticates_with_complete_file_bytes(client: MagicMock, monkeypatch: 
 
 def test_explicit_client_configuration(client: MagicMock, create_client: Mock, monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.setattr(sys, 'argv', [
-		'rconx', '-p', 'password', '-P', 'idle_timeout', '--idle-window', '0.25', '--encoding', 'latin1', '-t', '0.75',
+		'rconx', '-p', 'password', '-P', 'srcds', '--encoding', 'latin1', '-t', '0.75',
 		'--max-send-packet-size', '101', '--max-receive-packet-size', '202', '--max-response-size', '303',
 		'[::1]:12345', 'command',
 	])
 	main()
 	assert create_client.call_count == 1
-	assert create_client.call_args[0] == ('::1', 12345, RconPreset.idle_timeout)
+	assert create_client.call_args[0] == ('::1', 12345, RconPreset.srcds)
 	options = create_client.call_args[1]
-	assert options['response_idle_timeout'] == 0.25
 	assert options['default_encoding'] == 'latin1'
 	assert options['max_send_packet_size'] == 101
 	assert options['max_receive_packet_size'] == 202

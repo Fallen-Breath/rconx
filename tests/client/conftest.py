@@ -1,6 +1,6 @@
 import asyncio
 import socket
-from typing import Any, Generator, List, Optional, Tuple, cast
+from typing import Any, Generator, List, Tuple, cast
 
 import pytest
 from typing_extensions import Unpack
@@ -22,8 +22,8 @@ def rcon_factory(monkeypatch: pytest.MonkeyPatch) -> Generator[SyncRconFactory, 
 		endpoint.sockets.append(sock)
 		return cast(socket.socket, sock)
 
-	def create(preset: RconPreset = RconPreset.single_packet, *, response_idle_timeout: Optional[float] = 0, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
-		client = RconClient.create('localhost', len(endpoints) + 1, preset, response_idle_timeout=response_idle_timeout, **kwargs)
+	def create(preset: RconPreset = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
+		client = RconClient.create('localhost', len(endpoints) + 1, preset, **kwargs)
 		endpoint = SyncRconEndpoint(client, RconPeer(preset))
 		endpoints.append(endpoint)
 		return endpoint
@@ -46,8 +46,8 @@ def async_rcon_factory(monkeypatch: pytest.MonkeyPatch, run_async: RunAsync, mem
 		endpoint.writers.append(writer)
 		return reader, cast(asyncio.StreamWriter, writer)
 
-	def create(preset: RconPreset = RconPreset.single_packet, *, response_idle_timeout: Optional[float] = 0, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
-		client = AsyncRconClient.create('localhost', len(endpoints) + 1, preset, response_idle_timeout=response_idle_timeout, **kwargs)
+	def create(preset: RconPreset = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
+		client = AsyncRconClient.create('localhost', len(endpoints) + 1, preset, **kwargs)
 		endpoint = AsyncRconEndpoint(client, RconPeer(preset))
 		endpoints.append(endpoint)
 		return endpoint

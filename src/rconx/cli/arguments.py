@@ -34,7 +34,6 @@ class CliOptions:
 	preset: RconPreset
 	interactive: bool
 	timeout: Optional[float]
-	idle_window: Optional[float]
 	encoding: Optional[str]
 	raw: bool
 	max_send_packet_size: Optional[SizeLimit]
@@ -96,7 +95,6 @@ def parse_args() -> CliOptions:
 	parser.add_argument('-P', '--preset', choices=[preset.name for preset in RconPreset], default='minecraft', help='RCON exchange preset (default: %(default)s)')
 	parser.add_argument('-i', '--interactive', action='store_true', help='read commands interactively after the startup commands')
 	parser.add_argument('-t', '--timeout', type=timeout, default=10.0, metavar='SECONDS|none', help='timeout for each connect, authentication or command operation (default: 10 seconds)')
-	parser.add_argument('--idle-window', type=seconds, metavar='SECONDS', help='response quiet window; required and valid only for the idle_timeout preset')
 	parser.add_argument('--encoding', metavar='NAME', help='text password, command and response encoding (default: core utf8)')
 	parser.add_argument('--raw', action='store_true', help='write response bytes; incompatible with -i')
 	parser.add_argument('--max-send-packet-size', type=size_limit, metavar='BYTES|none', help='send packet size limit; none disables it (default: selected preset)')
@@ -108,8 +106,6 @@ def parse_args() -> CliOptions:
 
 	if not arguments.items:
 		raise ValueError('HOST:PORT is required')
-	if (arguments.preset == 'idle_timeout') != (arguments.idle_window is not None):
-		raise ValueError('--idle-window is required and valid only for idle_timeout')
 	if arguments.raw and arguments.interactive:
 		raise ValueError('--raw cannot be combined with --interactive')
 	password: Union[str, bytes]
@@ -128,7 +124,6 @@ def parse_args() -> CliOptions:
 		preset=RconPreset[arguments.preset],
 		interactive=arguments.interactive,
 		timeout=arguments.timeout,
-		idle_window=arguments.idle_window,
 		encoding=arguments.encoding,
 		raw=arguments.raw,
 		max_send_packet_size=arguments.max_send_packet_size,

@@ -25,7 +25,6 @@ def __create_client(options: CliOptions) -> RconClient:
 		client_options['max_response_size'] = options.max_response_size.value
 	return RconClient.create(
 		options.address.host, options.address.port, options.preset,
-		response_idle_timeout=options.idle_window,
 		**client_options,
 	)
 

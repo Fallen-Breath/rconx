@@ -19,7 +19,6 @@ def test_defaults_and_zero_commands(monkeypatch: pytest.MonkeyPatch):
 	assert options.preset == RconPreset.minecraft
 	assert options.timeout == 10.0
 	assert not options.interactive
-	assert options.idle_window is None
 	assert options.encoding is None
 	assert not options.raw
 	assert options.max_send_packet_size is None
@@ -203,41 +202,13 @@ def test_invalid_address_is_rejected(monkeypatch: pytest.MonkeyPatch, address: s
 
 
 @pytest.mark.parametrize('preset', [RconPreset.minecraft, RconPreset.srcds, RconPreset.cuberite, RconPreset.single_packet])
-def test_presets_without_idle_window(monkeypatch: pytest.MonkeyPatch, preset: RconPreset):
+def test_presets(monkeypatch: pytest.MonkeyPatch, preset: RconPreset):
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--preset', preset.name, 'localhost:25575'])
 	assert parse_args().preset == preset
 
 
 def test_unknown_preset_is_rejected(monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--preset', 'unknown', 'localhost:25575'])
-	with pytest.raises(SystemExit) as caught:
-		parse_args()
-	assert caught.value.code != 0
-
-
-@pytest.mark.parametrize('window', [0.0, 0.25])
-def test_idle_preset_with_window(monkeypatch: pytest.MonkeyPatch, window: float):
-	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--preset', 'idle_timeout', '--idle-window', str(window), 'localhost:25575'])
-	options = parse_args()
-	assert options.preset == RconPreset.idle_timeout
-	assert options.idle_window == window
-
-
-def test_idle_preset_requires_window(monkeypatch: pytest.MonkeyPatch):
-	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--preset', 'idle_timeout', 'localhost:25575'])
-	with pytest.raises(Exception):
-		parse_args()
-
-
-def test_non_idle_preset_rejects_window(monkeypatch: pytest.MonkeyPatch):
-	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--idle-window', '0.25', 'localhost:25575'])
-	with pytest.raises(Exception):
-		parse_args()
-
-
-@pytest.mark.parametrize('window', ['-1', 'nan', 'inf', 'none'])
-def test_invalid_idle_window_is_rejected(monkeypatch: pytest.MonkeyPatch, window: str):
-	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--preset', 'idle_timeout', '--idle-window=' + window, 'localhost:25575'])
 	with pytest.raises(SystemExit) as caught:
 		parse_args()
 	assert caught.value.code != 0

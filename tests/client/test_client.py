@@ -28,7 +28,7 @@ def test_context_cleanup_preserves_body_exception(rcon_factory: SyncRconFactory)
 @pytest.mark.parametrize('preset', list(RconPreset))
 def test_tcp_preset_exchange(tcp_listener_factory: TcpListenerFactory, preset: RconPreset):
 	listener = tcp_listener_factory()
-	client = RconClient.create(listener.address.host, listener.address.port, preset, response_idle_timeout=0.02)
+	client = RconClient.create(listener.address.host, listener.address.port, preset)
 	model = RconPeer(preset)
 
 	def serve():
@@ -177,13 +177,11 @@ def test_cuberite_requires_empty_acknowledgement(rcon_factory: SyncRconFactory):
 	assert not endpoint.client.authenticated
 
 
-@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.minecraft, RconPreset.cuberite, RconPreset.idle_timeout])
+@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.minecraft, RconPreset.cuberite])
 def test_incomplete_exchange_is_not_success(rcon_factory: SyncRconFactory, preset: RconPreset):
 	endpoint = rcon_factory(preset)
 	if preset == RconPreset.cuberite:
 		endpoint.peer.command_replies = [PacketReply(packet_type=2)]
-	elif preset == RconPreset.idle_timeout:
-		endpoint.peer.command_replies = []
 	else:
 		endpoint.peer.probe_replies = []
 	endpoint.client.connect()
@@ -288,7 +286,7 @@ def test_send_limit_override(rcon_factory: SyncRconFactory, preset: RconPreset, 
 	assert endpoint.client.execute(payload).content == b'firstsecond'
 
 
-@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.single_packet, RconPreset.idle_timeout])
+@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.single_packet])
 def test_other_presets_default_send_limit_is_unlimited(rcon_factory: SyncRconFactory, preset: RconPreset):
 	endpoint = rcon_factory(preset)
 	endpoint.client.connect()
@@ -575,26 +573,7 @@ def test_invalid_configuration(client_type: Union[Type[RconClient], Type[AsyncRc
 
 
 @pytest.mark.parametrize('client_type', [RconClient, AsyncRconClient])
-@pytest.mark.parametrize('window, error', [
-	pytest.param(None, TypeError, id='missing'),
-	pytest.param(-1, ValueError, id='negative'),
-	pytest.param(float('inf'), ValueError, id='infinite'),
-	pytest.param(float('nan'), ValueError, id='nan'),
-])
-def test_idle_preset_requires_valid_window(client_type: Union[Type[RconClient], Type[AsyncRconClient]], window: Any, error: Type[BaseException]):
-	with pytest.raises(error):
-		client_type.create('localhost', 1, RconPreset.idle_timeout, response_idle_timeout=window)
-
-
-@pytest.mark.parametrize('client_type', [RconClient, AsyncRconClient])
 @pytest.mark.parametrize('preset', [None, 'minecraft', 1])
 def test_invalid_preset(client_type: Union[Type[RconClient], Type[AsyncRconClient]], preset: Any):
 	with pytest.raises(TypeError):
 		client_type.create('localhost', 1, preset)
-
-
-@pytest.mark.parametrize('client_type', [RconClient, AsyncRconClient])
-@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.minecraft, RconPreset.cuberite, RconPreset.single_packet])
-def test_non_idle_presets_ignore_window(client_type: Union[Type[RconClient], Type[AsyncRconClient]], preset: RconPreset):
-	client = client_type.create('localhost', 1, preset, response_idle_timeout=-1)
-	assert not client.connected and not client.authenticated

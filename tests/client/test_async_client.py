@@ -124,14 +124,12 @@ def test_cancelled_operation_closes_and_allows_retry(run_async: RunAsync, async_
 	run_async(scenario())
 
 
-@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.minecraft, RconPreset.cuberite, RconPreset.idle_timeout])
+@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.minecraft, RconPreset.cuberite])
 def test_cancelled_incomplete_exchange_is_not_success(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset):
 	async def scenario():
 		endpoint = async_rcon_factory(preset)
 		if preset == RconPreset.cuberite:
 			endpoint.peer.command_replies = [PacketReply(packet_type=2)]
-		elif preset == RconPreset.idle_timeout:
-			endpoint.peer.command_replies = []
 		else:
 			endpoint.peer.probe_replies = []
 		await endpoint.client.connect()
@@ -268,7 +266,7 @@ def test_failed_connect_allows_retry(run_async: RunAsync, async_rcon_factory: As
 def test_tcp_preset_exchange(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, preset: RconPreset):
 	async def scenario():
 		listener = tcp_listener_factory()
-		client = AsyncRconClient.create(listener.address.host, listener.address.port, preset, response_idle_timeout=0.02)
+		client = AsyncRconClient.create(listener.address.host, listener.address.port, preset)
 		model = RconPeer(preset)
 
 		async def serve():
@@ -553,7 +551,7 @@ def test_send_limit_override(run_async: RunAsync, async_rcon_factory: AsyncRconF
 	run_async(scenario())
 
 
-@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.single_packet, RconPreset.idle_timeout])
+@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.single_packet])
 def test_other_presets_default_send_limit_is_unlimited(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset):
 	async def scenario():
 		endpoint = async_rcon_factory(preset)

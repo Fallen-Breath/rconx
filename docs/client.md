@@ -89,26 +89,12 @@ RCON commands can produce multiple response packets. The `preset` argument to `c
 | `minecraft` | Waits for the first command reply before requesting an end-of-result marker. The server must send at least one reply for each command. |
 | `cuberite` | Reads Cuberite's acknowledgement and complete command result. |
 | `single_packet` | Treats the first command reply as the complete result. |
-| `idle_timeout` | Collects replies until no new packet starts within a configured interval. |
 
 The client handles the preset's auxiliary responses and excludes them from the returned command output.
 
 ```python
 client = RconClient.create("127.0.0.1", 27015, RconPreset.srcds)
 ```
-
-### Collection by idle timeout
-
-The `RconPreset.idle_timeout` preset requires the `response_idle_timeout` keyword argument when calling `RconClient.create` or `AsyncRconClient.create`. This argument sets the waiting interval, in seconds, for another packet to start after the first complete response. Expiration ends collection and keeps the connection open.
-
-```python
-client = RconClient.create(
-	"127.0.0.1", 27015, RconPreset.idle_timeout,
-	response_idle_timeout=0.2,
-)
-```
-
-The interval can end before delayed output arrives. That output is excluded from the current result and may interfere with the next command, so this preset provides a heuristic completion condition.
 
 ### Server compatibility
 

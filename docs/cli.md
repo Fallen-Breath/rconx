@@ -61,12 +61,12 @@ export RCONX_PASSWORD="your-rcon-password"
 
 The password source is selected as follows:
 
-| Password selection | Source |
-| --- | --- |
+| Password selection                      | Source                                              |
+|-----------------------------------------|-----------------------------------------------------|
 | No explicit password option is supplied | The value of environment variable `RCONX_PASSWORD`. |
-| `-p PASSWORD`, `--password PASSWORD` | The supplied argument. |
-| `--password-env NAME` | The value of the named environment variable. |
-| `--password-file PATH` | The complete contents of the file as bytes. |
+| `-p PASSWORD`, `--password PASSWORD`    | The supplied argument.                              |
+| `--password-env NAME`                   | The value of the named environment variable.        |
+| `--password-file PATH`                  | The complete contents of the file as bytes.         |
 
 On multi-user systems, command-line passwords may be visible to other users through `ps`, so using environment variable is suggested.
 
@@ -94,10 +94,10 @@ The CLI sends each nonempty input line as one command and ignores empty lines. E
 
 The CLI uses separate streams for results and diagnostics:
 
-| Stream | Content |
-| --- | --- |
-| Standard output (`stdout`) | Command results. |
-| Standard error (`stderr`) | Interactive prompts and error diagnostics. |
+| Stream                     | Content                                    |
+|----------------------------|--------------------------------------------|
+| Standard output (`stdout`) | Command results.                           |
+| Standard error (`stderr`)  | Interactive prompts and error diagnostics. |
 
 ### Text output
 
@@ -141,11 +141,11 @@ The value `none` disables the timeout.
 
 Size options accept byte counts, or `none` to remove a limit:
 
-| Option | Default | Scope |
-| --- | --- | --- |
-| `--max-send-packet-size` | 1460 bytes for `minecraft`, 1504 bytes for `cuberite`, otherwise `none` | Each outgoing packet. |
-| `--max-receive-packet-size` | 4 MiB | Each incoming packet. |
-| `--max-response-size` | 4 MiB | The accumulated output of one command. |
+| Option                      | Default                                                                 | Scope                                  |
+|-----------------------------|-------------------------------------------------------------------------|----------------------------------------|
+| `--max-send-packet-size`    | 1460 bytes for `minecraft`, 1504 bytes for `cuberite`, otherwise `none` | Each outgoing packet.                  |
+| `--max-receive-packet-size` | 4 MiB                                                                   | Each incoming packet.                  |
+| `--max-response-size`       | 4 MiB                                                                   | The accumulated output of one command. |
 
 Packet limits include the length header. The response limit counts command output before text decoding. Exceeding a limit ends the invocation.
 

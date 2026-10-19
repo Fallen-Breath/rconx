@@ -12,9 +12,9 @@ The following examples connect to a Minecraft server and execute a command.
 from rconx import RconClient, RconPreset
 
 with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
-	client.connect_and_authenticate("your-rcon-password")
-	response = client.execute("list")
-	print(response.text)
+    client.connect_and_authenticate("your-rcon-password")
+    response = client.execute("list")
+    print(response.text)
 ```
 
 ### Asynchronous client
@@ -26,10 +26,10 @@ from rconx import AsyncRconClient, RconPreset
 
 
 async def main():
-	async with AsyncRconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
-		await client.connect_and_authenticate("your-rcon-password")
-		response = await client.execute("list")
-		print(response.text)
+    async with AsyncRconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
+        await client.connect_and_authenticate("your-rcon-password")
+        response = await client.execute("list")
+        print(response.text)
 
 
 asyncio.run(main())
@@ -43,9 +43,9 @@ Call `connect_and_authenticate` on a disconnected client to establish an authent
 
 `RconClient` and `AsyncRconClient` expose these read-only properties:
 
-| Property | Meaning |
-| --- | --- |
-| `connected` | The client has an established connection. |
+| Property        | Meaning                                                           |
+|-----------------|-------------------------------------------------------------------|
+| `connected`     | The client has an established connection.                         |
 | `authenticated` | Authentication has succeeded for the client's current connection. |
 
 An authenticated client reuses its connection for subsequent commands. Leaving the context closes that connection and clears authentication. Applications that manage a client without a context can close it with `close()` or `await aclose()`. Closing may be repeated, and the same client can later connect and authenticate again.
@@ -64,10 +64,10 @@ Passwords and commands accept `str` or `bytes`. The `default_encoding` keyword a
 
 `execute` returns an `RconContent` containing the collected command output:
 
-| Property | Meaning |
-| --- | --- |
-| `content` | The result as bytes. |
-| `text` | The result decoded strictly using the client's configured encoding. |
+| Property  | Meaning                                                             |
+|-----------|---------------------------------------------------------------------|
+| `content` | The result as bytes.                                                |
+| `text`    | The result decoded strictly using the client's configured encoding. |
 
 ```python
 response = client.execute("list")
@@ -83,12 +83,12 @@ The selected preset determines when result collection finishes.
 
 RCON commands can produce multiple response packets. The `preset` argument to `create` accepts a `RconPreset` value that determines when the client has collected a complete result.
 
-| Preset | Result collection |
-| --- | --- |
-| `srcds` | Collects command replies through the SRCDS completion exchange. |
-| `minecraft` | Waits for the first command reply before requesting an end-of-result marker. The server must send at least one reply for each command. |
-| `cuberite` | Reads Cuberite's acknowledgement and complete command result. |
-| `single_packet` | Treats the first command reply as the complete result. |
+| Preset          | Result collection                                                                                                                      |
+|-----------------|----------------------------------------------------------------------------------------------------------------------------------------|
+| `srcds`         | Collects command replies through the SRCDS completion exchange.                                                                        |
+| `minecraft`     | Waits for the first command reply before requesting an end-of-result marker. The server must send at least one reply for each command. |
+| `cuberite`      | Reads Cuberite's acknowledgement and complete command result.                                                                          |
+| `single_packet` | Treats the first command reply as the complete result.                                                                                 |
 
 The client handles the preset's auxiliary responses and excludes them from the returned command output.
 
@@ -100,20 +100,20 @@ client = RconClient.create("127.0.0.1", 27015, RconPreset.srcds)
 
 The following server versions have been tested with the listed presets.
 
-| Preset | Server | Tested with |
-| --- | --- | --- |
-| `srcds` | Counter-Strike: Source | 2026-09-16 update (version 11003710) |
-| `srcds` | Team Fortress 2 | 2026-10-16 update (version 11138802) |
-| `srcds` | Garry's Mod | 2026.09.17 |
-| `srcds` | Insurgency (2014) | 2.4.2.4 |
-| `srcds` | Left 4 Dead 2 | 2.2.4.3 |
-| `srcds` | Project Zomboid | 42.21.0 |
-| `minecraft` | Vanilla Minecraft | 1.7.10, 1.8.9, 1.12.2, 1.16.5, 1.20.1, 26.3 |
-| `minecraft` | CraftBukkit | 1.8.8, 1.12.2, 1.16.5, 1.20.1, 1.21.11, 26.3 |
-| `minecraft` | Paper | 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.1, 26.3 |
-| `minecraft` | Folia | 1.20.6, 1.21.11, 26.3 |
-| `cuberite` | Cuberite | build 445 |
-| `single_packet` | Factorio | 2.0.77 |
+| Preset          | Server                 | Tested with                                  |
+|-----------------|------------------------|----------------------------------------------|
+| `srcds`         | Counter-Strike: Source | 2026-09-16 update (version 11003710)         |
+| `srcds`         | Team Fortress 2        | 2026-10-16 update (version 11138802)         |
+| `srcds`         | Garry's Mod            | 2026.09.17                                   |
+| `srcds`         | Insurgency (2014)      | 2.4.2.4                                      |
+| `srcds`         | Left 4 Dead 2          | 2.2.4.3                                      |
+| `srcds`         | Project Zomboid        | 42.21.0                                      |
+| `minecraft`     | Vanilla Minecraft      | 1.7.10, 1.8.9, 1.12.2, 1.16.5, 1.20.1, 26.3  |
+| `minecraft`     | CraftBukkit            | 1.8.8, 1.12.2, 1.16.5, 1.20.1, 1.21.11, 26.3 |
+| `minecraft`     | Paper                  | 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.1, 26.3  |
+| `minecraft`     | Folia                  | 1.20.6, 1.21.11, 26.3                        |
+| `cuberite`      | Cuberite               | build 445                                    |
+| `single_packet` | Factorio               | 2.0.77                                       |
 
 ## Timeouts and size limits
 
@@ -121,12 +121,12 @@ The following server versions have been tested with the listed presets.
 
 `RconClient` accepts a `timeout` in seconds on its communication methods:
 
-| Method | Timeout scope |
-| --- | --- |
-| `connect` | Each underlying connection attempt. |
-| `authenticate` | The complete authentication operation. |
-| `connect_and_authenticate` | A shared connection and authentication budget. |
-| `execute` | The complete command exchange, including all response packets. |
+| Method                     | Timeout scope                                                  |
+|----------------------------|----------------------------------------------------------------|
+| `connect`                  | Each underlying connection attempt.                            |
+| `authenticate`             | The complete authentication operation.                         |
+| `connect_and_authenticate` | A shared connection and authentication budget.                 |
+| `execute`                  | The complete command exchange, including all response packets. |
 
 `connect_and_authenticate` uses the time remaining after connecting for authentication. Connection establishment retains the timeout scope of `connect`.
 
@@ -142,18 +142,18 @@ response = client.execute("list", timeout=5)
 
 These settings are keyword arguments to `create`:
 
-| Setting | Default | Scope |
-| --- | --- | --- |
-| `max_send_packet_size` | 1460 bytes for `minecraft`, 1504 bytes for `cuberite`, otherwise `None` | Each outgoing packet. |
-| `max_receive_packet_size` | 4 MiB | Each incoming packet. |
-| `max_response_size` | 4 MiB | The accumulated output of one command. |
+| Setting                   | Default                                                                 | Scope                                  |
+|---------------------------|-------------------------------------------------------------------------|----------------------------------------|
+| `max_send_packet_size`    | 1460 bytes for `minecraft`, 1504 bytes for `cuberite`, otherwise `None` | Each outgoing packet.                  |
+| `max_receive_packet_size` | 4 MiB                                                                   | Each incoming packet.                  |
+| `max_response_size`       | 4 MiB                                                                   | The accumulated output of one command. |
 
 Packet limits count encoded bytes, including the length header. `max_response_size` counts only command output. These limits are independent, and `None` removes an additional limit.
 
 ```python
 client = RconClient.create(
-	"127.0.0.1", 25575, RconPreset.minecraft,
-	max_response_size=8 * 1024 * 1024,
+    "127.0.0.1", 25575, RconPreset.minecraft,
+    max_response_size=8 * 1024 * 1024,
 )
 ```
 
@@ -161,24 +161,24 @@ client = RconClient.create(
 
 rconx classifies client failures with the following exceptions. All inherit from `RconError`.
 
-| Exception | Meaning |
-| --- | --- |
-| `RconConnectionError` | Connection establishment or transport failed. |
-| `RconTimeoutError` | A timeout managed by rconx expired. |
-| `RconPacketDecodeError` | A received packet could not be decoded. |
-| `RconAuthenticationError` | The server explicitly refused authentication or authenticated access. |
-| `RconProtocolError` | A response did not match the selected preset's interaction. |
-| `RconStateError` | The operation is invalid for the client state, or another operation is active. |
+| Exception                 | Meaning                                                                        |
+|---------------------------|--------------------------------------------------------------------------------|
+| `RconConnectionError`     | Connection establishment or transport failed.                                  |
+| `RconTimeoutError`        | A timeout managed by rconx expired.                                            |
+| `RconPacketDecodeError`   | A received packet could not be decoded.                                        |
+| `RconAuthenticationError` | The server explicitly refused authentication or authenticated access.          |
+| `RconProtocolError`       | A response did not match the selected preset's interaction.                    |
+| `RconStateError`          | The operation is invalid for the client state, or another operation is active. |
 
 Argument and size validation can also raise `TypeError` or `ValueError`. Caller-controlled asyncio timeouts use the selected utility's timeout exception.
 
 `RconClient` and `AsyncRconClient` handle failures as follows:
 
-| Failure | Client state |
-| --- | --- |
-| A connection attempt fails. | Disconnected and unauthenticated. |
-| An `authenticate` or `execute` call is rejected before its exchange begins. | The existing state is preserved. |
-| An authentication or command exchange fails. | The connection closes and authentication is cleared. |
+| Failure                                                                     | Client state                                         |
+|-----------------------------------------------------------------------------|------------------------------------------------------|
+| A connection attempt fails.                                                 | Disconnected and unauthenticated.                    |
+| An `authenticate` or `execute` call is rejected before its exchange begins. | The existing state is preserved.                     |
+| An authentication or command exchange fails.                                | The connection closes and authentication is cleared. |
 
 After a communication failure, the same client can connect and authenticate again. rconx does not automatically reconnect or resend commands. A command may have executed before its response was lost, so the application decides whether repeating it is appropriate.
 
@@ -188,9 +188,9 @@ The application can restore the connection after a transport failure:
 from rconx import RconConnectionError
 
 try:
-	client.execute("list")
+    client.execute("list")
 except RconConnectionError:
-	client.connect_and_authenticate("your-rcon-password")
+    client.connect_and_authenticate("your-rcon-password")
 ```
 
 ## Low-level clients
@@ -205,16 +205,16 @@ This example sends a Minecraft authentication request and reads its response as 
 from rconx import Packet, PacketType, RawRconClient
 
 with RawRconClient("127.0.0.1", 25575) as client:
-	client.connect()
-	client.send_packet(Packet(1, PacketType.auth, b"your-rcon-password"))
-	response = client.receive_packet()
-	print(response)
+    client.connect()
+    client.send_packet(Packet(1, PacketType.auth, b"your-rcon-password"))
+    response = client.receive_packet()
+    print(response)
 ```
 
-| Method | Behavior |
-| --- | --- |
-| `send_packet(packet)` | Sends one complete packet. |
-| `receive_packet()` | Receives one complete packet. |
+| Method                                       | Behavior                                                                                         |
+|----------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `send_packet(packet)`                        | Sends one complete packet.                                                                       |
+| `receive_packet()`                           | Receives one complete packet.                                                                    |
 | `try_receive_packet(first_byte_timeout=...)` | Receives a complete packet, or returns `None` if no packet starts within the specified interval. |
 
 Once a packet starts, receiving must complete. A partial-packet failure closes the connection. A `None` result from `try_receive_packet` describes only the waiting interval and does not establish the end of a command result.
@@ -227,9 +227,9 @@ Low-level clients accept the same packet-size keywords as high-level clients. Th
 
 [Low-level servers](server.md#low-level-servers) deliver `Connection` or `AsyncConnection` objects with the same packet methods.
 
-| Class | Closing |
-| --- | --- |
-| `Connection` | `close()` closes the connection and interrupts pending communication. |
+| Class             | Closing                                                                                                            |
+|-------------------|--------------------------------------------------------------------------------------------------------------------|
+| `Connection`      | `close()` closes the connection and interrupts pending communication.                                              |
 | `AsyncConnection` | `await aclose()` allows buffered writes to finish. `abort()` terminates communication and discards pending output. |
 
 A closed connection object cannot reconnect. A low-level client can establish a new connection after closing or a communication failure.
@@ -241,6 +241,6 @@ from rconx import Connection
 
 
 def handle(connection: Connection):
-	with connection:
-		connection.receive_packet()
+    with connection:
+        connection.receive_packet()
 ```

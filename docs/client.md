@@ -112,20 +112,22 @@ The interval can end before delayed output arrives. That output is excluded from
 
 ### Server compatibility
 
-Candidate entries indicate that the preset's suitability for that server is not established.
+The following server versions have been tested with the listed presets.
 
-| Server | Preset | Live-server testing |
+| Preset | Server | Tested with |
 | --- | --- | --- |
-| SRCDS | `srcds` | Not tested |
-| Vanilla Minecraft | `minecraft` | Not tested |
-| CraftBukkit | `minecraft` | Not tested |
-| Paper | `minecraft` | Not tested |
-| Folia | `minecraft` | Not tested |
-| Cuberite | `cuberite` | Not tested |
-| Factorio | `single_packet` (candidate) | Not tested |
-| ARK: Survival Evolved | `single_packet` (candidate) | Not tested |
-| Conan Exiles | `single_packet` (candidate) | Not tested |
-| Project Zomboid | `idle_timeout` (candidate) | Not tested |
+| `srcds` | Counter-Strike: Source | 2026-09-16 update (version 11003710) |
+| `srcds` | Team Fortress 2 | 2026-10-16 update (version 11138802) |
+| `srcds` | Garry's Mod | 2026.09.17 |
+| `srcds` | Insurgency (2014) | 2.4.2.4 |
+| `srcds` | Left 4 Dead 2 | 2.2.4.3 |
+| `srcds` | Project Zomboid | 42.21.0 |
+| `minecraft` | Vanilla Minecraft | 1.7.10, 1.8.9, 1.12.2, 1.16.5, 1.20.1, 26.3 |
+| `minecraft` | CraftBukkit | 1.8.8, 1.12.2, 1.16.5, 1.20.1, 1.21.11, 26.3 |
+| `minecraft` | Paper | 1.7.10, 1.8.8, 1.12.2, 1.16.5, 1.20.1, 26.3 |
+| `minecraft` | Folia | 1.20.6, 1.21.11, 26.3 |
+| `cuberite` | Cuberite | build 445 |
+| `single_packet` | Factorio | 2.0.77 |
 
 ## Timeouts and size limits
 

@@ -399,7 +399,7 @@ def test_capacity_includes_authentication_and_disconnected_callback(sync_listene
 				try:
 					_authenticate(peer)
 					break
-				except (EOFError, ConnectionResetError, BrokenPipeError):
+				except (EOFError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
 					assert time.monotonic() < deadline, 'session capacity was not released'
 					peer.close()
 					time.sleep(0.005)

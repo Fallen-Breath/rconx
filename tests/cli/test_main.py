@@ -82,7 +82,7 @@ def test_explicit_client_configuration(client: MagicMock, create_client: Mock, m
 	assert create_client.call_count == 1
 	assert create_client.call_args[0] == ('::1', 12345, RconPreset.idle_timeout)
 	options = create_client.call_args[1]
-	assert options['first_byte_timeout'] == 0.25
+	assert options['response_idle_timeout'] == 0.25
 	assert options['default_encoding'] == 'latin1'
 	assert options['max_send_packet_size'] == 101
 	assert options['max_receive_packet_size'] == 202

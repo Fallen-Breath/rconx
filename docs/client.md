@@ -99,12 +99,12 @@ client = RconClient.create("127.0.0.1", 27015, RconPreset.srcds)
 
 ### Collection by idle timeout
 
-The `RconPreset.idle_timeout` preset requires the `first_byte_timeout` keyword argument when calling `RconClient.create` or `AsyncRconClient.create`. This argument sets the waiting interval, in seconds, for another packet to start after the first complete response. Expiration ends collection and keeps the connection open.
+The `RconPreset.idle_timeout` preset requires the `response_idle_timeout` keyword argument when calling `RconClient.create` or `AsyncRconClient.create`. This argument sets the waiting interval, in seconds, for another packet to start after the first complete response. Expiration ends collection and keeps the connection open.
 
 ```python
 client = RconClient.create(
 	"127.0.0.1", 27015, RconPreset.idle_timeout,
-	first_byte_timeout=0.2,
+	response_idle_timeout=0.2,
 )
 ```
 

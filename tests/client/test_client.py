@@ -28,7 +28,7 @@ def test_context_cleanup_preserves_body_exception(rcon_factory: SyncRconFactory)
 @pytest.mark.parametrize('preset', list(RconPreset))
 def test_tcp_preset_exchange(tcp_listener_factory: TcpListenerFactory, preset: RconPreset):
 	listener = tcp_listener_factory()
-	client = RconClient.create(listener.address.host, listener.address.port, preset, first_byte_timeout=0.02)
+	client = RconClient.create(listener.address.host, listener.address.port, preset, response_idle_timeout=0.02)
 	model = RconPeer(preset)
 
 	def serve():
@@ -583,7 +583,7 @@ def test_invalid_configuration(client_type: Union[Type[RconClient], Type[AsyncRc
 ])
 def test_idle_preset_requires_valid_window(client_type: Union[Type[RconClient], Type[AsyncRconClient]], window: Any, error: Type[BaseException]):
 	with pytest.raises(error):
-		client_type.create('localhost', 1, RconPreset.idle_timeout, first_byte_timeout=window)
+		client_type.create('localhost', 1, RconPreset.idle_timeout, response_idle_timeout=window)
 
 
 @pytest.mark.parametrize('client_type', [RconClient, AsyncRconClient])
@@ -596,5 +596,5 @@ def test_invalid_preset(client_type: Union[Type[RconClient], Type[AsyncRconClien
 @pytest.mark.parametrize('client_type', [RconClient, AsyncRconClient])
 @pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.minecraft, RconPreset.cuberite, RconPreset.single_packet])
 def test_non_idle_presets_ignore_window(client_type: Union[Type[RconClient], Type[AsyncRconClient]], preset: RconPreset):
-	client = client_type.create('localhost', 1, preset, first_byte_timeout=-1)
+	client = client_type.create('localhost', 1, preset, response_idle_timeout=-1)
 	assert not client.connected and not client.authenticated

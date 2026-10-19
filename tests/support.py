@@ -541,10 +541,10 @@ class AsyncRconEndpoint:
 
 
 class SyncRconFactory(Protocol):
-	def __call__(self, preset: RconPreset = RconPreset.single_packet, *, first_byte_timeout: Optional[float] = 0, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
+	def __call__(self, preset: RconPreset = RconPreset.single_packet, *, response_idle_timeout: Optional[float] = 0, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
 		...
 
 
 class AsyncRconFactory(Protocol):
-	def __call__(self, preset: RconPreset = RconPreset.single_packet, *, first_byte_timeout: Optional[float] = 0, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
+	def __call__(self, preset: RconPreset = RconPreset.single_packet, *, response_idle_timeout: Optional[float] = 0, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
 		...

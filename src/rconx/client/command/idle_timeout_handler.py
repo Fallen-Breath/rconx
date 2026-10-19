@@ -15,11 +15,11 @@ class IdleTimeoutCommandHandler(CommandHandler):
 	Quiet-window collection for servers without a usable ending probe, such as Project Zomboid.
 	Waits for the first reply, then ends on a quiet window between packets; completion is heuristic.
 	"""
-	def __init__(self, *, first_byte_timeout: float):
-		if first_byte_timeout is None:
-			raise TypeError('first_byte_timeout must be a finite non-negative number, got None')
-		validate_timeout(first_byte_timeout, name='first_byte_timeout')
-		self.__first_byte_timeout = first_byte_timeout
+	def __init__(self, *, response_idle_timeout: float):
+		if response_idle_timeout is None:
+			raise TypeError('response_idle_timeout must be a finite non-negative number, got None')
+		validate_timeout(response_idle_timeout, name='response_idle_timeout')
+		self.__response_idle_timeout = response_idle_timeout
 
 	def execute(self, context: RconOperationContext, command: bytes):
 		request = context.prepare_request(PacketType.exec_command, command)
@@ -33,7 +33,7 @@ class IdleTimeoutCommandHandler(CommandHandler):
 				raise RconProtocolError('unexpected command response request id {}, expected {}'.format(packet.request_id, request.request_id))
 
 			context.append_response(packet.payload)
-			packet = context.try_receive_packet(first_byte_timeout=self.__first_byte_timeout)
+			packet = context.try_receive_packet(first_byte_timeout=self.__response_idle_timeout)
 
 	async def execute_async(self, context: AsyncRconOperationContext, command: bytes):
 		request = context.prepare_request(PacketType.exec_command, command)
@@ -47,4 +47,4 @@ class IdleTimeoutCommandHandler(CommandHandler):
 				raise RconProtocolError('unexpected command response request id {}, expected {}'.format(packet.request_id, request.request_id))
 
 			context.append_response(packet.payload)
-			packet = await context.try_receive_packet(first_byte_timeout=self.__first_byte_timeout)
+			packet = await context.try_receive_packet(first_byte_timeout=self.__response_idle_timeout)

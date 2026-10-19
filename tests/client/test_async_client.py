@@ -268,7 +268,7 @@ def test_failed_connect_allows_retry(run_async: RunAsync, async_rcon_factory: As
 def test_tcp_preset_exchange(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, preset: RconPreset):
 	async def scenario():
 		listener = tcp_listener_factory()
-		client = AsyncRconClient.create(listener.address.host, listener.address.port, preset, first_byte_timeout=0.02)
+		client = AsyncRconClient.create(listener.address.host, listener.address.port, preset, response_idle_timeout=0.02)
 		model = RconPeer(preset)
 
 		async def serve():

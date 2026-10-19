@@ -72,7 +72,7 @@ class _BaseRconClient:
 		self.__operation_lock = threading.Lock()
 
 	@classmethod
-	def _create_handlers(cls, preset: RconPreset, *, first_byte_timeout: Optional[float]) -> _RconHandlers:
+	def _create_handlers(cls, preset: RconPreset, *, response_idle_timeout: Optional[float]) -> _RconHandlers:
 		if not isinstance(preset, RconPreset):
 			raise TypeError('preset must be a RconPreset, got {}'.format(type(preset).__name__))
 
@@ -90,11 +90,11 @@ class _BaseRconClient:
 			from rconx.client.command.single_packet_handler import SinglePacketCommandHandler
 			command_handler = SinglePacketCommandHandler()
 		elif preset == RconPreset.idle_timeout:
-			if first_byte_timeout is None:
-				raise TypeError('first_byte_timeout is required for the idle_timeout preset')
+			if response_idle_timeout is None:
+				raise TypeError('response_idle_timeout is required for the idle_timeout preset')
 
 			from rconx.client.command.idle_timeout_handler import IdleTimeoutCommandHandler
-			command_handler = IdleTimeoutCommandHandler(first_byte_timeout=first_byte_timeout)
+			command_handler = IdleTimeoutCommandHandler(response_idle_timeout=response_idle_timeout)
 		else:
 			raise ValueError('unsupported RCON preset {!r}'.format(preset))
 
@@ -219,7 +219,7 @@ class RconClient(_BaseRconClient):
 	@classmethod
 	def create(
 		cls, host: str, port: int, preset: RconPreset, *,
-		first_byte_timeout: Optional[float] = None,
+		response_idle_timeout: Optional[float] = None,
 		**kwargs: Unpack[RconClientOptions],
 	) -> 'RconClient':
 		"""
@@ -228,11 +228,11 @@ class RconClient(_BaseRconClient):
 		:param host: The remote host name or IP address
 		:param port: The remote TCP port
 		:param preset: The authentication and command exchange preset
-		:keyword first_byte_timeout: Quiet window in seconds between replies; required for ``idle_timeout``, ignored by other presets
+		:keyword response_idle_timeout: Quiet window in seconds between replies; required for ``idle_timeout``, ignored by other presets
 		:param kwargs: Optional encoding and size limits described by ``RconClientOptions``; supplied values override preset defaults
 		:return: A disconnected client
 		"""
-		handlers = cls._create_handlers(preset, first_byte_timeout=first_byte_timeout)
+		handlers = cls._create_handlers(preset, response_idle_timeout=response_idle_timeout)
 		cls._apply_preset_defaults(preset, kwargs)
 
 		return cls(
@@ -363,7 +363,7 @@ class AsyncRconClient(_BaseRconClient):
 	@classmethod
 	def create(
 		cls, host: str, port: int, preset: RconPreset, *,
-		first_byte_timeout: Optional[float] = None,
+		response_idle_timeout: Optional[float] = None,
 		**kwargs: Unpack[RconClientOptions],
 	) -> 'AsyncRconClient':
 		"""
@@ -372,11 +372,11 @@ class AsyncRconClient(_BaseRconClient):
 		:param host: The remote host name or IP address
 		:param port: The remote TCP port
 		:param preset: The authentication and command exchange preset
-		:keyword first_byte_timeout: Quiet window in seconds between replies; required for ``idle_timeout``, ignored by other presets
+		:keyword response_idle_timeout: Quiet window in seconds between replies; required for ``idle_timeout``, ignored by other presets
 		:param kwargs: Optional encoding and size limits described by ``RconClientOptions``; supplied values override preset defaults
 		:return: A disconnected client; this method does not require awaiting
 		"""
-		handlers = cls._create_handlers(preset, first_byte_timeout=first_byte_timeout)
+		handlers = cls._create_handlers(preset, response_idle_timeout=response_idle_timeout)
 		cls._apply_preset_defaults(preset, kwargs)
 
 		return cls(

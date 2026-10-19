@@ -443,24 +443,60 @@ def test_context_closes_connection(run_async: RunAsync, async_connection_factory
 	run_async(scenario())
 
 
-@pytest.mark.parametrize('cancel', [False, True])
-def test_close_failure_releases_transport_and_propagates_error(run_async: RunAsync, memory_writer_support: None, cancel: bool):
+def test_close_after_abort_waits_for_release(run_async: RunAsync, memory_writer_support: None):
+	async def scenario():
+		writer = MemoryWriter()
+		writer.defer_abort = True
+		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
+		connection.abort()
+		closing = asyncio.ensure_future(connection.aclose())
+		try:
+			await writer.close_started.wait()
+			assert not closing.done() and not writer.released
+		finally:
+			writer.release()
+			await closing
+		assert writer.released
+
+	run_async(scenario())
+
+
+def test_cancelled_close_can_finish_cleanup(run_async: RunAsync, memory_writer_support: None):
+	async def scenario():
+		writer = MemoryWriter()
+		writer.defer_abort = True
+		writer.close_gate = asyncio.Event()
+		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
+		closing = asyncio.ensure_future(connection.aclose())
+		try:
+			await writer.close_started.wait()
+			closing.cancel()
+			with pytest.raises(asyncio.CancelledError):
+				await closing
+			assert connection.closed and not writer.released
+			closing = asyncio.ensure_future(connection.aclose())
+			await asyncio.sleep(0)
+			assert not closing.done()
+		finally:
+			writer.release()
+			await asyncio.gather(closing, return_exceptions=True)
+		await closing
+		assert connection.closed
+		assert writer.released
+		await connection.aclose()
+
+	run_async(scenario())
+
+
+def test_close_failure_releases_transport_and_propagates_error(run_async: RunAsync, memory_writer_support: None):
 	async def scenario():
 		writer = MemoryWriter()
 		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
-		if cancel:
-			writer.close_gate = asyncio.Event()
-			task: asyncio.Future[None] = asyncio.ensure_future(connection.aclose())
-			await writer.close_started.wait()
-			task.cancel()
-			with pytest.raises(asyncio.CancelledError):
-				await task
-		else:
-			primary = OSError('close failure')
-			writer.close_error = primary
-			with pytest.raises(OSError) as caught:
-				await connection.aclose()
-			assert caught.value is primary
+		primary = OSError('close failure')
+		writer.close_error = primary
+		with pytest.raises(OSError) as caught:
+			await connection.aclose()
+		assert caught.value is primary
 		assert connection.closed
 		assert writer.released
 		await connection.aclose()

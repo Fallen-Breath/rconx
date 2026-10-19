@@ -236,6 +236,8 @@ class AsyncConnection(__BaseConnection):
 		super().__init__(**kwargs)
 		self.__stream: Optional[_AsyncStream] = _AsyncStream(reader, writer)
 		self.__closing_stream: Optional[_AsyncStream] = None
+		self.__aborted = False
+		self.__close_waiter: Optional[asyncio.Future[None]] = None
 		self.__drain_lock: Optional[asyncio.Lock] = None
 
 	@property
@@ -332,16 +334,26 @@ class AsyncConnection(__BaseConnection):
 		Close normally, allowing buffered writes to finish
 		"""
 		stream = self.__stream
+		close_normally = stream is not None  #  an existing close or abort only needs waiting
 		self.__stream = None
 		if stream is not None:
 			self.__closing_stream = stream
-			try:
+		else:
+			stream = self.__closing_stream
+			if stream is None:
+				return
+
+		try:
+			if close_normally:
 				await self.__close_writer(stream.writer)
-			except BaseException:
-				with contextlib.suppress(BaseException):
-					self.abort()
-				raise
-			finally:
+			await self.__wait_writer_closed(stream.writer)
+		except BaseException:
+			self.abort()
+			raise
+		finally:
+			# Preserve the stream while a supported close notification is still pending.
+			waiter = self.__close_waiter
+			if not _HAS_WAIT_CLOSED or (waiter is not None and waiter.done() and not waiter.cancelled()):
 				self.__closing_stream = None
 
 	def abort(self):
@@ -350,8 +362,10 @@ class AsyncConnection(__BaseConnection):
 		"""
 		stream = self.__stream if self.__stream is not None else self.__closing_stream
 		self.__stream = None
-		self.__closing_stream = None
 		if stream is not None:
+			# aclose() still needs the stream to wait for transport termination.
+			self.__closing_stream = stream
+			self.__aborted = True
 			stream.writer.transport.abort()
 
 	async def __aenter__(self) -> 'AsyncConnection':
@@ -402,11 +416,25 @@ class AsyncConnection(__BaseConnection):
 
 	async def __close_writer(self, writer: asyncio.StreamWriter):
 		# Older Proactor transports ignore abort() once close() has begun.
+		# Drain the full buffer before close() to keep that wait abortable.
 		writer.transport.set_write_buffer_limits(high=0)
 		async with self.__get_drain_lock():
-			if self.__closing_stream is None:
+			if self.__aborted:
 				return
 			await writer.drain()
 		writer.close()
-		if _HAS_WAIT_CLOSED:
-			await writer.wait_closed()
+
+	async def __wait_writer_closed(self, writer: asyncio.StreamWriter):
+		if not _HAS_WAIT_CLOSED:
+			return
+		if self.__close_waiter is None:
+			self.__close_waiter = asyncio.ensure_future(writer.wait_closed())
+		waiter = self.__close_waiter
+
+		# Cancelling this caller must not cancel the shared close notification.
+		await asyncio.wait([waiter])
+		error = waiter.exception()
+
+		# After abort, transport errors explain termination, not a failure to release resources.
+		if error is not None and (not self.__aborted or not isinstance(error, OSError)):
+			raise error

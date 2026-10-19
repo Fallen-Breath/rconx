@@ -8,7 +8,8 @@ from typing_extensions import Unpack
 from rconx.client.client import AsyncRconClient, RconClient
 from rconx.client.client_options import RconClientOptions
 from rconx.client.preset import RconPreset
-from tests.support import AsyncRconEndpoint, AsyncRconFactory, RconPeer, RconReader, RconSocket, RconWriter, RunAsync, SyncRconEndpoint, SyncRconFactory
+from rconx.client.raw import AsyncRawRconClient
+from tests.support import AsyncRawEndpoint, AsyncRconEndpoint, AsyncRconFactory, RconPeer, RconReader, RconSocket, RconWriter, RunAsync, SyncRconEndpoint, SyncRconFactory
 
 
 @pytest.fixture
@@ -55,3 +56,29 @@ def async_rcon_factory(monkeypatch: pytest.MonkeyPatch, run_async: RunAsync, mem
 	yield create
 	for endpoint in endpoints:
 		run_async(endpoint.client.aclose())
+
+
+@pytest.fixture
+def async_raw_endpoint(monkeypatch: pytest.MonkeyPatch, run_async: RunAsync, memory_writer_support: None) -> Generator[AsyncRawEndpoint, None, None]:
+	peer = RconPeer(RconPreset.single_packet)
+	reader = RconReader(peer)
+	writer = RconWriter(peer, reader)
+	endpoint = AsyncRawEndpoint(AsyncRawRconClient('localhost', 1), reader, writer)
+	writers = [writer]
+	first_connection = True
+
+	async def connect(host: str, port: int, **kwargs: Any) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+		nonlocal first_connection
+		if first_connection:
+			first_connection = False
+		else:
+			endpoint.reader = RconReader(peer)
+			endpoint.writer = RconWriter(peer, endpoint.reader)
+			writers.append(endpoint.writer)
+		return endpoint.reader, cast(asyncio.StreamWriter, endpoint.writer)
+
+	monkeypatch.setattr(asyncio, 'open_connection', connect)
+	yield endpoint
+	for writer in writers:
+		writer.release()
+	run_async(endpoint.client.aclose())

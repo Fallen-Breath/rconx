@@ -1,13 +1,114 @@
 import asyncio
 import socket
-from typing import Any, NoReturn
+from typing import Any, NoReturn, Type
 
 import pytest
 
 from rconx.client.raw import AsyncRawRconClient, LocalAddress
 from rconx.common.exceptions import RconConnectionError
 from rconx.common.protocol import Packet
-from tests.support import RunAsync, SocketAddress, TcpListenerFactory, make_frame
+from tests.support import AsyncRawEndpoint, RunAsync, SocketAddress, TcpListenerFactory, make_frame
+
+
+async def _assert_reconnect_works(endpoint: AsyncRawEndpoint):
+	await endpoint.client.connect()
+	await endpoint.client.send_packet(Packet(17, 2, b'next'))
+	assert await endpoint.client.receive_packet() == Packet(17, 0, b'firstsecond')
+
+
+@pytest.mark.parametrize('operation', ['send', 'receive', 'try-receive'])
+def test_failed_operation_waits_for_release_and_allows_reconnect(run_async: RunAsync, async_raw_endpoint: AsyncRawEndpoint, operation: str):
+	async def scenario():
+		endpoint = async_raw_endpoint
+		client = endpoint.client
+		writer = endpoint.writer
+		writer.defer_abort = True
+		error = ConnectionResetError('connection reset')
+		writer.close_error = error
+		await client.connect()
+		task: asyncio.Future[Any]
+		if operation == 'send':
+			writer.write_error = error
+			task = asyncio.ensure_future(client.send_packet(Packet(17, 2, b'command')))
+		else:
+			endpoint.reader.set_exception(error)
+			if operation == 'receive':
+				task = asyncio.ensure_future(client.receive_packet())
+			else:
+				task = asyncio.ensure_future(client.try_receive_packet(first_byte_timeout=1))
+		try:
+			await writer.close_started.wait()
+			assert not task.done() and not writer.released
+			with pytest.raises(RconConnectionError):
+				await client.connect()
+		finally:
+			writer.release()
+			await asyncio.gather(task, return_exceptions=True)
+		with pytest.raises(RconConnectionError):
+			await task
+		assert writer.released
+		await _assert_reconnect_works(endpoint)
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('cancel', [False, True], ids=['cleanup-error', 'cleanup-cancel'])
+def test_failure_cleanup_propagates_new_failure(run_async: RunAsync, async_raw_endpoint: AsyncRawEndpoint, cancel: bool):
+	async def scenario():
+		endpoint = async_raw_endpoint
+		client = endpoint.client
+		writer = endpoint.writer
+		writer.defer_abort = True
+		await client.connect()
+		endpoint.reader.set_exception(ConnectionResetError('connection reset'))
+		task = asyncio.ensure_future(client.receive_packet())
+		expected: Type[BaseException] = asyncio.CancelledError if cancel else RuntimeError
+		try:
+			await writer.close_started.wait()
+			if cancel:
+				task.cancel()
+			else:
+				writer.close_error = RuntimeError('close failure')
+				writer.release()
+			with pytest.raises(expected):
+				await task
+			with pytest.raises(RconConnectionError):
+				await client.connect()
+		finally:
+			writer.release()
+			await asyncio.gather(task, return_exceptions=True)
+		await client.aclose()
+		await _assert_reconnect_works(endpoint)
+
+	run_async(scenario())
+
+
+def test_configuration_failure_waits_for_release_and_allows_retry(run_async: RunAsync, async_raw_endpoint: AsyncRawEndpoint, monkeypatch: pytest.MonkeyPatch):
+	async def scenario():
+		endpoint = async_raw_endpoint
+		client = endpoint.client
+		writer = endpoint.writer
+		writer.defer_abort = True
+
+		def fail_configuration(level: int, option: int, value: int):
+			raise OSError('configuration failure')
+
+		monkeypatch.setattr(writer, 'setsockopt', fail_configuration)
+		task = asyncio.ensure_future(client.connect())
+		try:
+			await writer.close_started.wait()
+			assert not task.done() and not writer.released
+			with pytest.raises(RconConnectionError):
+				await client.connect()
+		finally:
+			writer.release()
+			await asyncio.gather(task, return_exceptions=True)
+		with pytest.raises(RconConnectionError):
+			await task
+		assert writer.released
+		await _assert_reconnect_works(endpoint)
+
+	run_async(scenario())
 
 
 def test_first_byte_window_allows_reuse(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory):

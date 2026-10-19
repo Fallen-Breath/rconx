@@ -13,6 +13,7 @@ from typing_extensions import Protocol, SupportsIndex, Unpack
 from rconx.client.client import AsyncRconClient, RconClient
 from rconx.client.client_options import RconClientOptions
 from rconx.client.preset import RconPreset
+from rconx.client.raw import AsyncRawRconClient
 from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
 from rconx.common.protocol import Packet, PacketType
 
@@ -143,8 +144,7 @@ class MemoryTransport:
 		self.abort_error: Optional[BaseException] = None
 
 	def abort(self):
-		self.__writer.closing = True
-		self.__writer.released = True
+		self.__writer.abort()
 		if self.abort_error is not None:
 			raise self.abort_error
 
@@ -178,6 +178,13 @@ class BasicMemoryWriter:
 	def close(self):
 		self.closing = True
 
+	def abort(self):
+		self.closing = True
+		self.release()
+
+	def release(self):
+		self.released = True
+
 
 class MemoryWriter(BasicMemoryWriter):
 	def __init__(self):
@@ -185,6 +192,20 @@ class MemoryWriter(BasicMemoryWriter):
 		self.close_gate: Optional[asyncio.Event] = None
 		self.close_started = asyncio.Event()
 		self.close_error: Optional[BaseException] = None
+		self.defer_abort = False
+
+	def abort(self):
+		if self.defer_abort:
+			self.closing = True
+			if self.close_gate is None:
+				self.close_gate = asyncio.Event()
+		else:
+			super().abort()
+
+	def release(self):
+		super().release()
+		if self.close_gate is not None:
+			self.close_gate.set()
 
 	async def wait_closed(self):
 		self.close_started.set()
@@ -192,7 +213,7 @@ class MemoryWriter(BasicMemoryWriter):
 			await self.close_gate.wait()
 		if self.close_error is not None:
 			raise self.close_error
-		self.released = True
+		self.release()
 
 
 class FailingReader:
@@ -483,6 +504,13 @@ class RconWriter(MemoryWriter):
 		response = self.peer.respond(Packet.decode_framed(data))
 		if response:
 			self.reader.feed_data(response)
+
+
+@dataclasses.dataclass
+class AsyncRawEndpoint:
+	client: AsyncRawRconClient
+	reader: RconReader
+	writer: RconWriter
 
 
 @dataclasses.dataclass

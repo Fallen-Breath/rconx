@@ -1,7 +1,7 @@
 import asyncio
 import dataclasses
 import socket
-from typing import Optional, cast
+from typing import Awaitable, Optional, TypeVar, cast
 
 from typing_extensions import Unpack
 
@@ -10,6 +10,8 @@ from rconx.common.connection_options import ConnectionOptions
 from rconx.common.exceptions import RconConnectionError, RconTimeoutError
 from rconx.common.protocol import Packet
 from rconx.common.utils import validate_timeout
+
+_ResultT = TypeVar('_ResultT')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -151,7 +153,7 @@ class AsyncRawRconClient:
 
 		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
 		"""
-		if self.__connection is not None and not self.__connection.closed:
+		if self.__connection is not None:
 			raise RconConnectionError('client is already connected')
 
 		try:
@@ -163,23 +165,23 @@ class AsyncRawRconClient:
 		except OSError as err:
 			raise RconConnectionError('failed to connect to {}:{}'.format(self.__config.host, self.__config.port)) from err
 
+		connection = AsyncConnection(
+			reader, writer,
+			max_send_packet_size=self.__config.connection_config.max_send_packet_size,
+			max_receive_packet_size=self.__config.connection_config.max_receive_packet_size,
+		)
+		self.__connection = connection
 		try:
 			sock = writer.get_extra_info('socket')
 			if sock is None:
 				raise RconConnectionError('TCP connection does not expose a socket')
 			cast(socket.socket, sock).setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-		except OSError as err:
-			writer.transport.abort()
-			raise RconConnectionError('failed to configure TCP connection') from err
-		except BaseException:
-			writer.transport.abort()
+		except BaseException as err:
+			connection.abort()
+			await self.aclose()
+			if isinstance(err, OSError):
+				raise RconConnectionError('failed to configure TCP connection') from err
 			raise
-		else:
-			self.__connection = AsyncConnection(
-				reader, writer,
-				max_send_packet_size=self.__config.connection_config.max_send_packet_size,
-				max_receive_packet_size=self.__config.connection_config.max_receive_packet_size,
-			)
 
 	async def send_packet(self, packet: Packet):
 		"""
@@ -187,7 +189,8 @@ class AsyncRawRconClient:
 
 		:param packet: The packet to send
 		"""
-		await self.__get_connection().send_packet(packet)
+		connection = self.__get_connection()
+		await self.__run_operation(connection.send_packet(packet))
 
 	async def receive_packet(self) -> Packet:
 		"""
@@ -195,7 +198,8 @@ class AsyncRawRconClient:
 
 		:return: The received packet
 		"""
-		return await self.__get_connection().receive_packet()
+		connection = self.__get_connection()
+		return await self.__run_operation(connection.receive_packet())
 
 	async def try_receive_packet(self, *, first_byte_timeout: float) -> Optional[Packet]:
 		"""
@@ -206,16 +210,17 @@ class AsyncRawRconClient:
 		:keyword first_byte_timeout: First-byte waiting time in seconds. ``0`` checks for an available first byte without waiting
 		:return: The received packet, or ``None`` if the first-byte wait expires before a packet starts
 		"""
-		return await self.__get_connection().try_receive_packet(first_byte_timeout=first_byte_timeout)
+		connection = self.__get_connection()
+		return await self.__run_operation(connection.try_receive_packet(first_byte_timeout=first_byte_timeout))
 
 	async def aclose(self):
 		"""
 		Close the current connection
 		"""
 		connection = self.__connection
-		self.__connection = None
 		if connection is not None:
 			await connection.aclose()
+			self.__connection = None
 
 	async def __aenter__(self) -> 'AsyncRawRconClient':
 		"""
@@ -233,3 +238,11 @@ class AsyncRawRconClient:
 		if self.__connection is None or self.__connection.closed:
 			raise RconConnectionError('client is not connected')
 		return self.__connection
+
+	async def __run_operation(self, operation: Awaitable[_ResultT]) -> _ResultT:
+		try:
+			return await operation
+		except BaseException:
+			if self.__connection is not None and self.__connection.closed:
+				await self.aclose()
+			raise

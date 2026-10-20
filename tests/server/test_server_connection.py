@@ -49,9 +49,9 @@ def test_sync_close_failure_still_notifies(io_error: bool):
 		with pytest.raises(RconConnectionError):
 			connection.receive_packet()
 	else:
-		with pytest.raises(OSError) as caught:
+		with pytest.raises(RconConnectionError) as caught:
 			connection.close()
-		assert caught.value is failure
+		assert caught.value.__cause__ is failure
 	connection.close()
 	assert notified == [connection]
 	assert connection.closed
@@ -125,9 +125,9 @@ def test_async_failure_still_notifies(run_async: RunAsync, memory_writer_support
 			with pytest.raises(RconConnectionError):
 				await connection.receive_packet()
 		else:
-			with pytest.raises(OSError) as caught:
+			with pytest.raises(RconConnectionError) as caught:
 				await connection.aclose()
-			assert caught.value is failure
+			assert caught.value.__cause__ is failure
 		connection.abort()
 		await connection.aclose()
 		assert notified == [connection]

@@ -4,7 +4,7 @@ from typing import Any, NoReturn, Type, Union
 import pytest
 
 from rconx.client.raw import AsyncRawRconClient, LocalAddress, RawRconClient
-from rconx.common.exceptions import RconConnectionError, RconTimeoutError
+from rconx.common.exceptions import RconConnectionError, RconSizeLimitError, RconStateError, RconTimeoutError
 from rconx.common.protocol import Packet
 from tests.support import SocketAddress, TcpListenerFactory, make_frame, read_exactly
 
@@ -56,10 +56,12 @@ def test_context_requires_explicit_connect(tcp_listener_factory: TcpListenerFact
 	client = RawRconClient(server.address.host, server.address.port)
 	with client as entered:
 		assert entered is client
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(RconStateError):
 			client.send_packet(Packet(17, 2, b'hello'))
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(RconStateError):
 			client.receive_packet()
+		with pytest.raises(RconStateError):
+			client.try_receive_packet(first_byte_timeout=0)
 		client.connect(timeout=1)
 		peer = server.accept()
 		peer.sendall(make_frame())
@@ -81,7 +83,7 @@ def test_context_closes_on_exit(tcp_listener_factory: TcpListenerFactory, body_e
 			client.connect(timeout=1)
 			peer = server.accept()
 	assert peer.recv(1) == b''
-	with pytest.raises(RconConnectionError):
+	with pytest.raises(RconStateError):
 		client.send_packet(Packet(17, 2, b'hello'))
 
 
@@ -95,7 +97,7 @@ def test_repeated_close_and_reconnect(tcp_listener_factory: TcpListenerFactory):
 		client.close()
 		client.close()
 		assert first.recv(1) == b''
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(RconStateError):
 			client.receive_packet()
 		client.connect(timeout=1)
 		second = server.accept()
@@ -108,7 +110,7 @@ def test_duplicate_connect_preserves_connection(tcp_listener_factory: TcpListene
 	with RawRconClient(server.address.host, server.address.port) as client:
 		client.connect(timeout=1)
 		peer = server.accept()
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(RconStateError):
 			client.connect(timeout=1)
 		peer.sendall(make_frame())
 		assert client.receive_packet(timeout=1) == Packet(17, 2, b'hello')
@@ -116,7 +118,8 @@ def test_duplicate_connect_preserves_connection(tcp_listener_factory: TcpListene
 
 @pytest.mark.parametrize('error, expected', [
 	pytest.param(OSError('connection failure'), RconConnectionError, id='connection-error'),
-	pytest.param(socket.timeout('connection timeout'), RconTimeoutError, id='timeout'),
+	pytest.param(socket.timeout('connection timeout'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('connection timeout'), RconTimeoutError, id='builtin-timeout'),
 ])
 def test_connection_failure_allows_retry(tcp_listener_factory: TcpListenerFactory, monkeypatch: pytest.MonkeyPatch, error: BaseException, expected: Type[BaseException]):
 	server = tcp_listener_factory()
@@ -127,8 +130,9 @@ def test_connection_failure_allows_retry(tcp_listener_factory: TcpListenerFactor
 	with RawRconClient(server.address.host, server.address.port) as client:
 		with monkeypatch.context() as patched:
 			patched.setattr(socket, 'create_connection', timeout)
-			with pytest.raises(expected):
+			with pytest.raises(expected) as caught:
 				client.connect(timeout=1)
+			assert caught.value.__cause__ is error
 		client.connect(timeout=1)
 		peer = server.accept()
 		peer.sendall(make_frame())
@@ -162,7 +166,7 @@ def test_receive_failure_allows_reconnect(tcp_listener_factory: TcpListenerFacto
 		first.shutdown(socket.SHUT_WR)
 		with pytest.raises(RconConnectionError):
 			client.receive_packet(timeout=1)
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(RconStateError):
 			client.send_packet(Packet(17, 2, b'hello'))
 		client.connect(timeout=1)
 		second = server.accept()
@@ -175,7 +179,7 @@ def test_send_limit_preserves_connection(tcp_listener_factory: TcpListenerFactor
 	with RawRconClient(server.address.host, server.address.port, max_send_packet_size=18) as client:
 		client.connect(timeout=1)
 		peer = server.accept()
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			client.send_packet(Packet(17, 2, b'hello'), timeout=1)
 		client.send_packet(Packet(17, 2, b''), timeout=1)
 		assert read_exactly(peer, 14) == make_frame(b'')
@@ -189,7 +193,7 @@ def test_receive_limit_closes_and_allows_reconnect(tcp_listener_factory: TcpList
 		client.connect(timeout=1)
 		first = server.accept()
 		first.sendall(make_frame()[:4])
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			client.receive_packet(timeout=1)
 		client.connect(timeout=1)
 		second = server.accept()

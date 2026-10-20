@@ -9,7 +9,7 @@ from typing_extensions import Unpack
 
 from rconx.common.connection import AsyncConnection, Connection, ConnectionConfig
 from rconx.common.connection_options import ConnectionOptions
-from rconx.common.exceptions import RconConnectionError, RconStateError
+from rconx.common.exceptions import RconConnectionError, RconStateError, RconTimeoutError
 from rconx.server.log import SERVER_LOGGER
 from rconx.server.raw_options import RawRconServerOptions
 from rconx.server.server_connection import AsyncServerConnection, ServerConnection
@@ -38,6 +38,8 @@ class _RconServerConfig:
 
 def _raise_close_error(error: Optional[BaseException]):
 	if error is not None:
+		if isinstance(error, (socket.timeout, TimeoutError)):
+			raise RconTimeoutError('closing server resources timed out') from error
 		if isinstance(error, OSError):
 			raise RconConnectionError('failed to close server resources') from error
 		raise error
@@ -107,7 +109,12 @@ class RawRconServer(_BaseRawRconServer[Connection]):
 			with self.__lock:
 				self.__sock = sock
 				started = not self.__stopping.is_set()
-				listening_address = sock.getsockname()
+				try:
+					listening_address = sock.getsockname()
+				except (socket.timeout, TimeoutError) as err:
+					raise RconTimeoutError('querying listener address timed out') from err
+				except OSError as err:
+					raise RconConnectionError('failed to query listener address') from err
 			if started:
 				SERVER_LOGGER.info('TCP listener ready: %s', listening_address)
 				if on_started is not None:
@@ -118,6 +125,8 @@ class RawRconServer(_BaseRawRconServer[Connection]):
 					except OSError as err:
 						if self.__stopping.is_set():
 							break
+						if isinstance(err, (socket.timeout, TimeoutError)):
+							raise RconTimeoutError('accepting a connection timed out') from err
 						raise RconConnectionError('failed to accept a connection') from err
 					self.__handle_connection(client)
 		except BaseException:
@@ -167,6 +176,8 @@ class RawRconServer(_BaseRawRconServer[Connection]):
 				with contextlib.suppress(BaseException):
 					sock.close()
 				raise
+		except (socket.timeout, TimeoutError) as err:
+			raise RconTimeoutError('starting server on {}:{} timed out'.format(self._config.host, self._config.port)) from err
 		except OSError as err:
 			raise RconConnectionError('failed to start server on {}:{}'.format(self._config.host, self._config.port)) from err
 		return sock
@@ -236,10 +247,18 @@ class AsyncRawRconServer(_BaseRawRconServer[AsyncConnection]):
 						self.__handle_connection, self._config.host, self._config.port,
 						backlog=self._config.backlog,
 					)
+			except (socket.timeout, TimeoutError) as err:
+				raise RconTimeoutError('starting server on {}:{} timed out'.format(self._config.host, self._config.port)) from err
 			except OSError as err:
 				raise RconConnectionError('failed to start server on {}:{}'.format(self._config.host, self._config.port)) from err
 			if not stopping.is_set():
-				SERVER_LOGGER.info('Async TCP listener ready: %s', [sock.getsockname() for sock in cast(asyncio.base_events.Server, self.__server).sockets])
+				try:
+					listening_addresses = [sock.getsockname() for sock in cast(asyncio.base_events.Server, self.__server).sockets]
+				except (socket.timeout, TimeoutError) as err:
+					raise RconTimeoutError('querying listener addresses timed out') from err
+				except OSError as err:
+					raise RconConnectionError('failed to query listener addresses') from err
+				SERVER_LOGGER.info('Async TCP listener ready: %s', listening_addresses)
 				if on_started is not None:
 					on_started()
 				await stopping.wait()
@@ -275,7 +294,12 @@ class AsyncRawRconServer(_BaseRawRconServer[AsyncConnection]):
 					error = err
 		_raise_close_error(error)
 		if server is not None:
-			await server.wait_closed()
+			try:
+				await server.wait_closed()
+			except (socket.timeout, TimeoutError) as err:
+				raise RconTimeoutError('waiting for server closure timed out') from err
+			except OSError as err:
+				raise RconConnectionError('failed to wait for server closure') from err
 
 	def __handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
 		try:

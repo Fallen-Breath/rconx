@@ -9,7 +9,7 @@ from typing_extensions import Unpack
 from rconx.common.async_utils import await_with_timeout
 from rconx.common.connection_info import ConnectionAddress, ConnectionInfo
 from rconx.common.connection_options import ConnectionOptions
-from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconTimeoutError
+from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconSizeLimitError, RconStateError, RconTimeoutError
 from rconx.common.protocol import LENGTH_HEADER, MIN_PACKET_BODY_SIZE, Packet
 from rconx.common.utils import BytesBuffer, Deadline, validate_packet_size_limit, validate_timeout
 
@@ -36,7 +36,7 @@ class __BaseConnection:
 		data = packet.encode_framed()
 		maximum_size = self.__config.max_send_packet_size
 		if maximum_size is not None and len(data) > maximum_size:
-			raise ValueError('packet size {} exceeds max_send_packet_size {}'.format(len(data), maximum_size))
+			raise RconSizeLimitError('packet size {} exceeds max_send_packet_size {}'.format(len(data), maximum_size))
 		return data
 
 	def _decode_packet_size(self, data: Union[bytes, bytearray]) -> int:
@@ -46,7 +46,7 @@ class __BaseConnection:
 		framed_size = LENGTH_HEADER.size + packet_size
 		maximum_size = self.__config.max_receive_packet_size
 		if maximum_size is not None and framed_size > maximum_size:
-			raise ValueError('packet size {} exceeds max_receive_packet_size {}'.format(framed_size, maximum_size))
+			raise RconSizeLimitError('packet size {} exceeds max_receive_packet_size {}'.format(framed_size, maximum_size))
 		return packet_size
 
 	@staticmethod
@@ -86,7 +86,7 @@ class Connection(__BaseConnection):
 			try:
 				sock.settimeout(deadline.get_remaining_or_raise())
 				sock.sendall(data)
-			except socket.timeout as err:
+			except (socket.timeout, TimeoutError) as err:
 				raise RconTimeoutError('packet send timed out') from err
 			except OSError as err:
 				raise RconConnectionError('failed to send packet') from err
@@ -121,7 +121,12 @@ class Connection(__BaseConnection):
 		Return a read-only snapshot of the open connection's local and remote addresses
 		"""
 		sock = self.__get_socket()
-		local, remote = sock.getsockname(), sock.getpeername()
+		try:
+			local, remote = sock.getsockname(), sock.getpeername()
+		except (socket.timeout, TimeoutError) as err:
+			raise RconTimeoutError('connection address query timed out') from err
+		except OSError as err:
+			raise RconConnectionError('failed to query connection addresses') from err
 		return ConnectionInfo(ConnectionAddress(local[0], local[1]), ConnectionAddress(remote[0], remote[1]))
 
 	def try_receive_packet(self, *, first_byte_timeout: float, timeout: Optional[float] = None) -> Optional[Packet]:
@@ -150,6 +155,8 @@ class Connection(__BaseConnection):
 				# An exhausted operation budget is a failure even when no packet has started.
 				deadline.get_remaining_or_raise()
 				return None
+			except TimeoutError as err:
+				raise RconTimeoutError('timed out while reading the first byte of a packet') from err
 			except OSError as err:
 				raise RconConnectionError('failed to read the first byte of a packet') from err
 
@@ -169,7 +176,12 @@ class Connection(__BaseConnection):
 				with contextlib.suppress(OSError):
 					sock.shutdown(socket.SHUT_RDWR)
 			finally:
-				sock.close()
+				try:
+					sock.close()
+				except (socket.timeout, TimeoutError) as err:
+					raise RconTimeoutError('connection close timed out') from err
+				except OSError as err:
+					raise RconConnectionError('failed to close connection') from err
 
 	def __enter__(self) -> 'Connection':
 		"""
@@ -185,7 +197,7 @@ class Connection(__BaseConnection):
 
 	def __get_socket(self) -> socket.socket:
 		if self.__socket is None:
-			raise RconConnectionError('connection is closed')
+			raise RconStateError('connection is closed')
 		return self.__socket
 
 	@contextlib.contextmanager
@@ -212,7 +224,7 @@ class Connection(__BaseConnection):
 			try:
 				sock.settimeout(deadline.get_remaining_or_raise())
 				data = sock.recv(min(size - len(buffer), _READ_CHUNK_SIZE))
-			except socket.timeout as err:
+			except (socket.timeout, TimeoutError) as err:
 				raise RconTimeoutError('timed out while reading {}'.format(stage)) from err
 			except OSError as err:
 				raise RconConnectionError('failed to read {}'.format(stage)) from err
@@ -260,6 +272,8 @@ class AsyncConnection(__BaseConnection):
 				stream.writer.write(data)
 				async with self.__get_drain_lock():
 					await stream.writer.drain()
+			except (socket.timeout, TimeoutError) as err:
+				raise RconTimeoutError('packet send timed out') from err
 			except OSError as err:
 				raise RconConnectionError('failed to send packet') from err
 
@@ -347,8 +361,12 @@ class AsyncConnection(__BaseConnection):
 			if close_normally:
 				await self.__close_writer(stream.writer)
 			await self.__wait_writer_closed(stream.writer)
-		except BaseException:
+		except BaseException as err:
 			self.abort()
+			if isinstance(err, (socket.timeout, TimeoutError)):
+				raise RconTimeoutError('connection close timed out') from err
+			if isinstance(err, OSError):
+				raise RconConnectionError('failed to close connection') from err
 			raise
 		finally:
 			# Preserve the stream while a supported close notification is still pending.
@@ -366,7 +384,12 @@ class AsyncConnection(__BaseConnection):
 			# aclose() still needs the stream to wait for transport termination.
 			self.__closing_stream = stream
 			self.__aborted = True
-			stream.writer.transport.abort()
+			try:
+				stream.writer.transport.abort()
+			except (socket.timeout, TimeoutError) as err:
+				raise RconTimeoutError('connection termination timed out') from err
+			except OSError as err:
+				raise RconConnectionError('failed to terminate connection') from err
 
 	async def __aenter__(self) -> 'AsyncConnection':
 		"""
@@ -382,7 +405,7 @@ class AsyncConnection(__BaseConnection):
 
 	def __get_stream(self) -> _AsyncStream:
 		if self.__stream is None:
-			raise RconConnectionError('connection is closed')
+			raise RconStateError('connection is closed')
 		return self.__stream
 
 	@contextlib.contextmanager
@@ -406,6 +429,8 @@ class AsyncConnection(__BaseConnection):
 			return await reader.readexactly(size)
 		except asyncio.IncompleteReadError as err:
 			raise RconConnectionError('peer closed the connection while reading {}'.format(stage)) from err
+		except (socket.timeout, TimeoutError) as err:
+			raise RconTimeoutError('timed out while reading {}'.format(stage)) from err
 		except OSError as err:
 			raise RconConnectionError('failed to read {}'.format(stage)) from err
 

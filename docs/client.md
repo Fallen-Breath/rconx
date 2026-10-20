@@ -161,18 +161,19 @@ client = RconClient.create(
 
 ## Errors and recovery
 
-rconx classifies client failures with the following exceptions. All inherit from `RconError`.
+rconx classifies client failures with the following exceptions. All inherit from `RconError`. Operation failures also inherit from `RconOperationError`, which excludes local state errors reported by `RconStateError`.
 
 | Exception                 | Meaning                                                                        |
 |---------------------------|--------------------------------------------------------------------------------|
 | `RconConnectionError`     | Connection establishment or transport failed.                                  |
-| `RconTimeoutError`        | A timeout managed by rconx expired.                                            |
+| `RconTimeoutError`        | A rconx time budget expired, or underlying I/O reported a timeout.              |
+| `RconSizeLimitError`      | A packet or command result exceeded a configured size limit.                   |
 | `RconPacketDecodeError`   | A received packet could not be decoded.                                        |
 | `RconAuthenticationError` | The server explicitly refused authentication or authenticated access.          |
-| `RconProtocolError`       | A response did not match the selected preset's interaction.                    |
+| `RconProtocolError`       | A packet or exchange did not satisfy the RCON protocol requirements.           |
 | `RconStateError`          | The operation is invalid for the client state, or another operation is active. |
 
-Argument and size validation can also raise `TypeError` or `ValueError`. Caller-controlled asyncio timeouts use the selected utility's timeout exception.
+Argument validation can also raise `TypeError` or `ValueError`. Caller-controlled asyncio timeouts use the selected utility's timeout exception.
 
 `RconClient` and `AsyncRconClient` handle failures as follows:
 

@@ -1,12 +1,12 @@
 import asyncio
 import socket
 import struct
-from typing import Any, Optional, cast
+from typing import Any, Optional, Type, cast
 
 import pytest
 
 from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
-from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconTimeoutError
+from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconSizeLimitError, RconStateError, RconTimeoutError
 from rconx.common.protocol import Packet
 from tests.support import AsyncConnectionFactory, RunAsync, BasicMemoryWriter, FailingReader, MemoryWriter, TcpListenerFactory, buffer_stream_output, make_frame, open_async_connection_pair, read_async_packet
 
@@ -93,7 +93,7 @@ def test_try_receive_network_error_closes(run_async: RunAsync):
 def test_try_receive_checks_packet_size(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory):
 	async def scenario():
 		endpoint = async_connection_factory(make_frame(), max_receive_packet_size=18)
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			await endpoint.connection.try_receive_packet(first_byte_timeout=0)
 		assert endpoint.connection.closed
 
@@ -240,7 +240,7 @@ def test_get_info_returns_address_snapshot(run_async: RunAsync, tcp_listener_fac
 			assert info.local_address.port == local_address[1]
 			assert info.remote_address.host == listener.address.host
 			assert info.remote_address.port == listener.address.port
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				pair.connection.get_info()
 		finally:
 			await pair.aclose()
@@ -263,7 +263,7 @@ def test_send_size_limit_allows_packet(run_async: RunAsync, async_connection_fac
 def test_send_size_limit_preserves_connection(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, maximum: Optional[int]):
 	async def scenario():
 		endpoint = async_connection_factory(make_frame(), max_send_packet_size=maximum)
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			await endpoint.connection.send_packet(Packet(17, 2, b'hello'))
 		assert endpoint.writer.sent == b''
 		assert not endpoint.connection.closed
@@ -295,11 +295,11 @@ def test_receive_size_limit_allows_packet(run_async: RunAsync, async_connection_
 def test_receive_size_limit_closes_connection(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, maximum: Optional[int]):
 	async def scenario():
 		endpoint = async_connection_factory(make_frame()[:4], max_receive_packet_size=maximum)
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			await endpoint.connection.receive_packet()
 		assert endpoint.connection.closed
 		assert endpoint.writer.released
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(RconStateError):
 			await endpoint.connection.receive_packet()
 
 	run_async(scenario())
@@ -308,7 +308,7 @@ def test_receive_size_limit_closes_connection(run_async: RunAsync, async_connect
 def test_default_receive_limit_includes_length_header(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory):
 	async def scenario():
 		endpoint = async_connection_factory(struct.pack('<i', DEFAULT_MAX_RECEIVE_PACKET_SIZE))
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			await endpoint.connection.receive_packet()
 		assert endpoint.connection.closed
 
@@ -341,10 +341,16 @@ def test_eof_closes_connection(run_async: RunAsync, async_connection_factory: As
 
 
 @pytest.mark.parametrize('stage', ['write', 'drain', 'read'])
-def test_network_error_closes_connection(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, stage: str):
+@pytest.mark.parametrize('error, expected', [
+	pytest.param(OSError('network failure'), RconConnectionError, id='network-error'),
+	pytest.param(socket.timeout('timeout'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('timeout'), RconTimeoutError, id='os-timeout'),
+])
+def test_network_error_closes_connection(
+	run_async: RunAsync, async_connection_factory: AsyncConnectionFactory, stage: str, error: OSError, expected: Type[BaseException],
+):
 	async def scenario():
 		endpoint = async_connection_factory()
-		error = OSError('network failure')
 		if stage == 'read':
 			connection = AsyncConnection(cast(asyncio.StreamReader, FailingReader(error)), cast(asyncio.StreamWriter, endpoint.writer))
 		else:
@@ -353,11 +359,12 @@ def test_network_error_closes_connection(run_async: RunAsync, async_connection_f
 				endpoint.writer.write_error = error
 			else:
 				endpoint.writer.drain_error = error
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(expected) as caught:
 			if stage == 'read':
 				await connection.receive_packet()
 			else:
 				await connection.send_packet(Packet(17, 2, b'hello'))
+		assert caught.value.__cause__ is error
 		assert connection.closed
 		assert endpoint.writer.released
 
@@ -437,7 +444,7 @@ def test_context_closes_connection(run_async: RunAsync, async_connection_factory
 		assert endpoint.connection.closed
 		assert endpoint.writer.released
 		await endpoint.connection.aclose()
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(RconStateError):
 			await endpoint.connection.send_packet(Packet(17, 2, b'hello'))
 
 	run_async(scenario())
@@ -488,18 +495,88 @@ def test_cancelled_close_can_finish_cleanup(run_async: RunAsync, memory_writer_s
 	run_async(scenario())
 
 
-def test_close_failure_releases_transport_and_propagates_error(run_async: RunAsync, memory_writer_support: None):
+@pytest.mark.parametrize('phase', ['drain', 'close', 'wait-closed'])
+@pytest.mark.parametrize('error, expected', [
+	pytest.param(OSError('close failure'), RconConnectionError, id='io-error'),
+	pytest.param(socket.timeout('close timed out'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('close timed out'), RconTimeoutError, id='os-timeout'),
+	pytest.param(RuntimeError('close failure'), RuntimeError, id='other-error'),
+])
+def test_close_failure_releases_transport_and_propagates_error(
+	run_async: RunAsync, memory_writer_support: None, monkeypatch: pytest.MonkeyPatch, phase: str, error: BaseException, expected: Type[BaseException],
+):
 	async def scenario():
 		writer = MemoryWriter()
 		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
-		primary = OSError('close failure')
-		writer.close_error = primary
-		with pytest.raises(OSError) as caught:
+
+		def fail_close():
+			raise error
+
+		if phase == 'drain':
+			writer.drain_error = error
+		elif phase == 'close':
+			monkeypatch.setattr(writer, 'close', fail_close)
+		else:
+			writer.close_error = error
+		with pytest.raises(expected) as caught:
 			await connection.aclose()
-		assert caught.value is primary
+		if isinstance(error, OSError):
+			assert caught.value.__cause__ is error
+		else:
+			assert caught.value is error
+		assert connection.closed
+		assert writer.released
+		if isinstance(error, OSError):
+			await connection.aclose()
+
+	run_async(scenario())
+
+
+def test_closed_connection_rejects_try_receive(run_async: RunAsync, async_connection_factory: AsyncConnectionFactory):
+	async def scenario():
+		connection = async_connection_factory().connection
+		await connection.aclose()
+		with pytest.raises(RconStateError):
+			await connection.try_receive_packet(first_byte_timeout=0)
+
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('error, expected', [
+	pytest.param(OSError('termination failure'), RconConnectionError, id='io-error'),
+	pytest.param(socket.timeout('termination timed out'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('termination timed out'), RconTimeoutError, id='os-timeout'),
+	pytest.param(RuntimeError('termination failure'), RuntimeError, id='other-error'),
+])
+def test_abort_failure_preserves_cause_and_closed_state(
+	run_async: RunAsync, memory_writer_support: None, error: BaseException, expected: Type[BaseException],
+):
+	async def scenario():
+		writer = MemoryWriter()
+		writer.transport.abort_error = error
+		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
+		with pytest.raises(expected) as caught:
+			connection.abort()
+		if isinstance(error, OSError):
+			assert caught.value.__cause__ is error
+		else:
+			assert caught.value is error
 		assert connection.closed
 		assert writer.released
 		await connection.aclose()
+
+	run_async(scenario())
+
+
+def test_close_after_abort_ignores_transport_termination_error(run_async: RunAsync, memory_writer_support: None):
+	async def scenario():
+		writer = MemoryWriter()
+		writer.close_error = OSError('transport terminated')
+		connection = AsyncConnection(asyncio.StreamReader(), cast(asyncio.StreamWriter, writer))
+		connection.abort()
+		await connection.aclose()
+		assert connection.closed
+		assert writer.released
 
 	run_async(scenario())
 

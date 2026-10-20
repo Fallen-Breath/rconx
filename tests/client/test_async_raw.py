@@ -5,7 +5,7 @@ from typing import Any, NoReturn, Type
 import pytest
 
 from rconx.client.raw import AsyncRawRconClient, LocalAddress
-from rconx.common.exceptions import RconConnectionError
+from rconx.common.exceptions import RconConnectionError, RconSizeLimitError, RconStateError, RconTimeoutError
 from rconx.common.protocol import Packet
 from tests.support import AsyncRawEndpoint, RunAsync, SocketAddress, TcpListenerFactory, make_frame
 
@@ -39,7 +39,7 @@ def test_failed_operation_waits_for_release_and_allows_reconnect(run_async: RunA
 		try:
 			await writer.close_started.wait()
 			assert not task.done() and not writer.released
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.connect()
 		finally:
 			writer.release()
@@ -72,7 +72,7 @@ def test_failure_cleanup_propagates_new_failure(run_async: RunAsync, async_raw_e
 				writer.release()
 			with pytest.raises(expected):
 				await task
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.connect()
 		finally:
 			writer.release()
@@ -83,7 +83,14 @@ def test_failure_cleanup_propagates_new_failure(run_async: RunAsync, async_raw_e
 	run_async(scenario())
 
 
-def test_configuration_failure_waits_for_release_and_allows_retry(run_async: RunAsync, async_raw_endpoint: AsyncRawEndpoint, monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize('error, expected', [
+	pytest.param(OSError('configuration failure'), RconConnectionError, id='connection-error'),
+	pytest.param(socket.timeout('configuration timeout'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('configuration timeout'), RconTimeoutError, id='builtin-timeout'),
+])
+def test_configuration_failure_waits_for_release_and_allows_retry(
+	run_async: RunAsync, async_raw_endpoint: AsyncRawEndpoint, monkeypatch: pytest.MonkeyPatch, error: OSError, expected: Type[BaseException],
+):
 	async def scenario():
 		endpoint = async_raw_endpoint
 		client = endpoint.client
@@ -91,20 +98,21 @@ def test_configuration_failure_waits_for_release_and_allows_retry(run_async: Run
 		writer.defer_abort = True
 
 		def fail_configuration(level: int, option: int, value: int):
-			raise OSError('configuration failure')
+			raise error
 
 		monkeypatch.setattr(writer, 'setsockopt', fail_configuration)
 		task = asyncio.ensure_future(client.connect())
 		try:
 			await writer.close_started.wait()
 			assert not task.done() and not writer.released
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.connect()
 		finally:
 			writer.release()
 			await asyncio.gather(task, return_exceptions=True)
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(expected) as caught:
 			await task
+		assert caught.value.__cause__ is error
 		assert writer.released
 		await _assert_reconnect_works(endpoint)
 
@@ -172,10 +180,12 @@ def test_context_requires_explicit_connect(run_async: RunAsync, tcp_listener_fac
 		client = AsyncRawRconClient(server.address.host, server.address.port)
 		async with client as entered:
 			assert entered is client
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.send_packet(Packet(17, 2, b'hello'))
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.receive_packet()
+			with pytest.raises(RconStateError):
+				await client.try_receive_packet(first_byte_timeout=0)
 			await client.connect()
 			peer = await server.accept_async()
 			peer.writer.write(make_frame())
@@ -201,7 +211,7 @@ def test_context_closes_on_exit(run_async: RunAsync, tcp_listener_factory: TcpLi
 				await client.connect()
 				peer = await server.accept_async()
 		assert await peer.reader.read(1) == b''
-		with pytest.raises(RconConnectionError):
+		with pytest.raises(RconStateError):
 			await client.send_packet(Packet(17, 2, b'hello'))
 
 	run_async(scenario())
@@ -218,7 +228,7 @@ def test_repeated_close_and_reconnect(run_async: RunAsync, tcp_listener_factory:
 			await client.aclose()
 			await client.aclose()
 			assert await first.reader.read(1) == b''
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.receive_packet()
 			await client.connect()
 			second = await server.accept_async()
@@ -235,7 +245,7 @@ def test_duplicate_connect_preserves_connection(run_async: RunAsync, tcp_listene
 		async with AsyncRawRconClient(server.address.host, server.address.port) as client:
 			await client.connect()
 			peer = await server.accept_async()
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.connect()
 			peer.writer.write(make_frame())
 			await peer.writer.drain()
@@ -244,18 +254,26 @@ def test_duplicate_connect_preserves_connection(run_async: RunAsync, tcp_listene
 	run_async(scenario())
 
 
-def test_connection_failure_allows_retry(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.parametrize('error, expected', [
+	pytest.param(OSError('connection failure'), RconConnectionError, id='connection-error'),
+	pytest.param(socket.timeout('connection timeout'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('connection timeout'), RconTimeoutError, id='builtin-timeout'),
+])
+def test_connection_failure_allows_retry(
+	run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, monkeypatch: pytest.MonkeyPatch, error: OSError, expected: Type[BaseException],
+):
 	async def scenario():
 		server = tcp_listener_factory()
 
 		async def failed_connection(*args: Any, **kwargs: Any) -> NoReturn:
-			raise OSError('connection failure')
+			raise error
 
 		async with AsyncRawRconClient(server.address.host, server.address.port) as client:
 			with monkeypatch.context() as patched:
 				patched.setattr(asyncio, 'open_connection', failed_connection)
-				with pytest.raises(RconConnectionError):
+				with pytest.raises(expected) as caught:
 					await client.connect()
+				assert caught.value.__cause__ is error
 			await client.connect()
 			peer = await server.accept_async()
 			peer.writer.write(make_frame())
@@ -305,7 +323,7 @@ def test_receive_failure_allows_reconnect(run_async: RunAsync, tcp_listener_fact
 			first.writer.close()
 			with pytest.raises(RconConnectionError):
 				await client.receive_packet()
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.send_packet(Packet(17, 2, b'hello'))
 			await client.connect()
 			second = await server.accept_async()
@@ -330,7 +348,7 @@ def test_cancelled_receive_allows_reconnect(run_async: RunAsync, tcp_listener_fa
 			task.cancel()
 			with pytest.raises(asyncio.CancelledError):
 				await task
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				await client.receive_packet()
 			await client.connect()
 			second = await server.accept_async()
@@ -347,7 +365,7 @@ def test_send_limit_preserves_connection(run_async: RunAsync, tcp_listener_facto
 		async with AsyncRawRconClient(server.address.host, server.address.port, max_send_packet_size=18) as client:
 			await client.connect()
 			peer = await server.accept_async()
-			with pytest.raises(ValueError):
+			with pytest.raises(RconSizeLimitError):
 				await client.send_packet(Packet(17, 2, b'hello'))
 			await client.send_packet(Packet(17, 2, b''))
 			assert await peer.reader.readexactly(14) == make_frame(b'')
@@ -366,7 +384,7 @@ def test_receive_limit_closes_and_allows_reconnect(run_async: RunAsync, tcp_list
 			first = await server.accept_async()
 			first.writer.write(make_frame()[:4])
 			await first.writer.drain()
-			with pytest.raises(ValueError):
+			with pytest.raises(RconSizeLimitError):
 				await client.receive_packet()
 			await client.connect()
 			second = await server.accept_async()

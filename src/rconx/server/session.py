@@ -7,7 +7,7 @@ from rconx.common.async_utils import await_with_timeout
 from rconx.common.connection import AsyncConnection, Connection
 from rconx.common.connection_info import ConnectionInfo
 from rconx.common.content import RconContent
-from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconProtocolError, RconTimeoutError
+from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconProtocolError, RconSizeLimitError, RconTimeoutError
 from rconx.common.protocol import LENGTH_HEADER, MIN_PACKET_BODY_SIZE, Packet, PacketType
 from rconx.common.utils import Deadline
 from rconx.server.config import ServerConfig
@@ -59,7 +59,7 @@ class _BaseSession(Generic[_ConnectionT]):
 		payload = encode_content(result, self._config.default_encoding)
 		maximum = self._config.max_response_size
 		if maximum is not None and len(payload) > maximum:
-			raise ValueError('command result exceeds max_response_size')
+			raise RconSizeLimitError('command result exceeds max_response_size')
 		packet_size = 4100
 		if self._config.max_send_packet_size is not None:
 			packet_size = min(packet_size, self._config.max_send_packet_size)

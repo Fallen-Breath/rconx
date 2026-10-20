@@ -8,7 +8,7 @@ import pytest
 from rconx.client.client import AsyncRconClient, RconClient
 from rconx.client.client_options import RconClientOptions
 from rconx.client.preset import RconPreset, RconPresetLiteral
-from rconx.common.exceptions import RconAuthenticationError, RconConnectionError, RconProtocolError, RconStateError, RconTimeoutError
+from rconx.common.exceptions import RconAuthenticationError, RconConnectionError, RconProtocolError, RconSizeLimitError, RconStateError, RconTimeoutError
 from rconx.common.protocol import PacketType
 from tests.support import Clock, PacketReply, RconPeer, SyncRconFactory, TcpListenerFactory, read_packet
 
@@ -242,7 +242,7 @@ def test_context_lifecycle(rcon_factory: SyncRconFactory, body_error: bool):
 	pytest.param(b'bad\x00value', ValueError, id='null-bytes'),
 	pytest.param('\u4e2d', UnicodeEncodeError, id='encoding'),
 	pytest.param(1, TypeError, id='wrong-type'),
-	pytest.param(b'x' * 100, ValueError, id='send-limit'),
+	pytest.param(b'x' * 100, RconSizeLimitError, id='send-limit'),
 ])
 def test_input_failure_preserves_session(rcon_factory: SyncRconFactory, operation: str, body: Any, error: Type[BaseException]):
 	endpoint = rcon_factory(default_encoding='ascii', max_send_packet_size=30)
@@ -269,11 +269,11 @@ def test_input_failure_preserves_session(rcon_factory: SyncRconFactory, operatio
 def test_preset_send_limit_counts_encoded_bytes(rcon_factory: SyncRconFactory, preset: Union[RconPreset, RconPresetLiteral], maximum: int):
 	endpoint = rcon_factory(preset)
 	endpoint.client.connect()
-	with pytest.raises(ValueError):
+	with pytest.raises(RconSizeLimitError):
 		endpoint.client.authenticate(b'x' * (maximum - 13))
 	endpoint.client.authenticate(b'x' * (maximum - 14))
 	assert endpoint.peer.requests[-1].payload == b'x' * (maximum - 14)
-	with pytest.raises(ValueError):
+	with pytest.raises(RconSizeLimitError):
 		endpoint.client.execute('\u4e2d' * ((maximum - 14) // 3 + 1))
 	assert endpoint.client.execute(b'x' * (maximum - 14)).content == b'firstsecond'
 
@@ -286,7 +286,7 @@ def test_send_limit_override(rcon_factory: SyncRconFactory, preset: Union[RconPr
 	payload = b'x' * (4096 if maximum is None else maximum - 14)
 	endpoint.client.authenticate(payload)
 	if maximum is not None:
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			endpoint.client.execute(payload + b'x')
 	assert endpoint.client.execute(payload).content == b'firstsecond'
 
@@ -316,7 +316,7 @@ def test_response_size_limit(rcon_factory: SyncRconFactory, preset: RconPreset, 
 		assert endpoint.client.execute('command').content == b''.join(output)
 		assert endpoint.client.authenticated
 	else:
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			endpoint.client.execute('command')
 		assert not endpoint.client.connected and not endpoint.client.authenticated
 		assert endpoint.socket.closed
@@ -326,7 +326,7 @@ def test_receive_packet_limit_closes_session(rcon_factory: SyncRconFactory):
 	endpoint = rcon_factory(max_receive_packet_size=18)
 	endpoint.client.connect()
 	endpoint.client.authenticate('password')
-	with pytest.raises(ValueError):
+	with pytest.raises(RconSizeLimitError):
 		endpoint.client.execute('command')
 	assert not endpoint.client.connected and endpoint.socket.closed
 
@@ -343,7 +343,7 @@ def test_default_aggregate_response_limit(rcon_factory: SyncRconFactory, unlimit
 	if unlimited:
 		assert len(endpoint.client.execute('next').content) == 4 * 1024 * 1024 + 1
 	else:
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			endpoint.client.execute('next')
 		assert not endpoint.client.connected
 
@@ -362,7 +362,7 @@ def test_default_receive_packet_limit(rcon_factory: SyncRconFactory, unlimited: 
 	if unlimited:
 		assert len(endpoint.client.execute('next').content) == 4 * 1024 * 1024 - 13
 	else:
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			endpoint.client.execute('next')
 		assert not endpoint.client.connected and endpoint.socket.closed
 
@@ -370,7 +370,7 @@ def test_default_receive_packet_limit(rcon_factory: SyncRconFactory, unlimited: 
 def test_zero_send_limit_rejects_empty_input(rcon_factory: SyncRconFactory):
 	endpoint = rcon_factory(RconPreset.minecraft, max_send_packet_size=0)
 	endpoint.client.connect()
-	with pytest.raises(ValueError):
+	with pytest.raises(RconSizeLimitError):
 		endpoint.client.authenticate(b'')
 	assert endpoint.client.connected and not endpoint.client.authenticated
 	assert endpoint.peer.requests == []

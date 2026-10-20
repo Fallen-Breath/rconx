@@ -6,7 +6,7 @@ from typing import Any, Optional, Type, cast
 import pytest
 
 from rconx.common.connection import Connection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
-from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconTimeoutError
+from rconx.common.exceptions import RconConnectionError, RconPacketDecodeError, RconSizeLimitError, RconStateError, RconTimeoutError
 from rconx.common.protocol import Packet
 from tests.support import Clock, MemorySocket, SocketFactory, TcpListenerFactory, ThreadCall, fill_socket_send_buffer, make_frame
 
@@ -32,6 +32,7 @@ def test_try_receive_complete_packet(socket_factory: SocketFactory, chunk_size: 
 @pytest.mark.parametrize('prefix_size', [0, 1, 3, 4, 8, 18])
 @pytest.mark.parametrize('error, expected', [
 	pytest.param(socket.timeout(), RconTimeoutError, id='timeout'),
+	pytest.param(TimeoutError(), RconTimeoutError, id='os-timeout'),
 	pytest.param(OSError(), RconConnectionError, id='network-error'),
 	pytest.param(b'', RconConnectionError, id='eof'),
 ])
@@ -82,7 +83,7 @@ def test_try_receive_total_budget_closes(socket_factory: SocketFactory, clock: C
 
 def test_try_receive_checks_packet_size(socket_factory: SocketFactory):
 	connection = Connection(cast(socket.socket, socket_factory([make_frame()])), max_receive_packet_size=18)
-	with pytest.raises(ValueError):
+	with pytest.raises(RconSizeLimitError):
 		connection.try_receive_packet(first_byte_timeout=0)
 	assert connection.closed
 
@@ -124,7 +125,7 @@ def test_send_size_limit_allows_packet(socket_factory: SocketFactory, maximum: O
 def test_send_size_limit_rejects_without_losing_connection(socket_factory: SocketFactory, maximum: Optional[int]):
 	sock = socket_factory([make_frame()])
 	connection = Connection(cast(socket.socket, sock), max_send_packet_size=maximum)
-	with pytest.raises(ValueError):
+	with pytest.raises(RconSizeLimitError):
 		connection.send_packet(Packet(17, 2, b'hello'))
 	assert sock.sent == b''
 	assert not connection.closed
@@ -149,18 +150,18 @@ def test_receive_size_limit_allows_packet(socket_factory: SocketFactory, maximum
 def test_receive_size_limit_rejects_and_closes(socket_factory: SocketFactory, maximum: Optional[int]):
 	sock = socket_factory([make_frame()[:4]])
 	connection = Connection(cast(socket.socket, sock), max_receive_packet_size=maximum)
-	with pytest.raises(ValueError):
+	with pytest.raises(RconSizeLimitError):
 		connection.receive_packet()
 	assert connection.closed
 	assert sock.closed
-	with pytest.raises(RconConnectionError):
+	with pytest.raises(RconStateError):
 		connection.receive_packet()
 
 
 def test_default_receive_limit_includes_length_header(socket_factory: SocketFactory):
 	sock = socket_factory([struct.pack('<i', DEFAULT_MAX_RECEIVE_PACKET_SIZE)])
 	connection = Connection(cast(socket.socket, sock))
-	with pytest.raises(ValueError):
+	with pytest.raises(RconSizeLimitError):
 		connection.receive_packet()
 	assert connection.closed
 
@@ -186,6 +187,7 @@ def test_eof_closes_connection(socket_factory: SocketFactory, prefix_size: int):
 @pytest.mark.parametrize('error, expected', [
 	pytest.param(OSError('network failure'), RconConnectionError, id='network-error'),
 	pytest.param(socket.timeout('timeout'), RconTimeoutError, id='timeout'),
+	pytest.param(TimeoutError('timeout'), RconTimeoutError, id='os-timeout'),
 	pytest.param(KeyboardInterrupt(), KeyboardInterrupt, id='interruption'),
 ])
 @pytest.mark.parametrize('operation', ['send', 'receive'])
@@ -193,13 +195,70 @@ def test_io_error_closes_connection(socket_factory: SocketFactory, error: BaseEx
 	sock = socket_factory([error])
 	sock.send_error = error
 	connection = Connection(cast(socket.socket, sock))
-	with pytest.raises(expected):
+	with pytest.raises(expected) as caught:
 		if operation == 'send':
 			connection.send_packet(Packet(17, 2, b'hello'))
 		else:
 			connection.receive_packet()
+	if isinstance(error, OSError):
+		assert caught.value.__cause__ is error
+	else:
+		assert caught.value is error
 	assert connection.closed
 	assert sock.closed
+
+
+def test_closed_connection_rejects_try_receive(socket_factory: SocketFactory):
+	connection = Connection(cast(socket.socket, socket_factory()))
+	connection.close()
+	with pytest.raises(RconStateError):
+		connection.try_receive_packet(first_byte_timeout=0)
+
+
+@pytest.mark.parametrize('method', ['getsockname', 'getpeername'])
+@pytest.mark.parametrize('error, expected', [
+	pytest.param(OSError('query failed'), RconConnectionError, id='io-error'),
+	pytest.param(socket.timeout('query timed out'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('query timed out'), RconTimeoutError, id='os-timeout'),
+])
+def test_address_query_error_preserves_connection(
+	socket_factory: SocketFactory, monkeypatch: pytest.MonkeyPatch, method: str, error: OSError, expected: Type[BaseException],
+):
+	sock = socket_factory([make_frame()])
+	monkeypatch.setattr(sock, 'getsockname', lambda: ('127.0.0.1', 12345), raising=False)
+	monkeypatch.setattr(sock, 'getpeername', lambda: ('127.0.0.1', 25575), raising=False)
+
+	def fail_query():
+		raise error
+
+	monkeypatch.setattr(sock, method, fail_query)
+	connection = Connection(cast(socket.socket, sock))
+	with pytest.raises(expected) as caught:
+		connection.get_info()
+	assert caught.value.__cause__ is error
+	assert not connection.closed
+	assert connection.receive_packet() == Packet(17, 2, b'hello')
+
+
+@pytest.mark.parametrize('error, expected', [
+	pytest.param(OSError('close failed'), RconConnectionError, id='io-error'),
+	pytest.param(socket.timeout('close timed out'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('close timed out'), RconTimeoutError, id='os-timeout'),
+	pytest.param(RuntimeError('close failed'), RuntimeError, id='other-error'),
+])
+def test_close_error_preserves_cause_and_closed_state(socket_factory: SocketFactory, error: BaseException, expected: Type[BaseException]):
+	sock = socket_factory()
+	sock.close_error = error
+	connection = Connection(cast(socket.socket, sock))
+	with pytest.raises(expected) as caught:
+		connection.close()
+	if isinstance(error, OSError):
+		assert caught.value.__cause__ is error
+	else:
+		assert caught.value is error
+	assert connection.closed
+	assert sock.closed
+	connection.close()
 
 
 def test_cleanup_error_preserves_original_error(socket_factory: SocketFactory):
@@ -349,7 +408,7 @@ def test_get_info_returns_read_only_address_snapshot(tcp_listener_factory: TcpLi
 			assert info.local_address.port == listener.address.port
 			assert info.remote_address.host == remote_address[0]
 			assert info.remote_address.port == remote_address[1]
-			with pytest.raises(RconConnectionError):
+			with pytest.raises(RconStateError):
 				connection.get_info()
 		finally:
 			connection.close()
@@ -379,7 +438,7 @@ def test_context_closes_connection(socket_factory: SocketFactory, body_error: bo
 	assert connection.closed
 	assert sock.closed
 	connection.close()
-	with pytest.raises(RconConnectionError):
+	with pytest.raises(RconStateError):
 		connection.send_packet(Packet(17, 2, b'hello'))
 
 

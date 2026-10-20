@@ -1,6 +1,7 @@
 from typing import Optional
 
 from rconx.client.raw import AsyncRawRconClient, RawRconClient
+from rconx.common.exceptions import RconSizeLimitError
 from rconx.common.protocol import Packet
 from rconx.common.utils import BytesBuffer, Deadline
 
@@ -37,7 +38,7 @@ class _BaseOperationContext:
 		response_size = self.__response_size + len(payload)
 		maximum_size = self.__max_response_size
 		if maximum_size is not None and response_size > maximum_size:
-			raise ValueError('accumulated command response size {} bytes exceeds max_response_size {} bytes'.format(response_size, maximum_size))
+			raise RconSizeLimitError('accumulated command response size {} bytes exceeds max_response_size {} bytes'.format(response_size, maximum_size))
 
 		self.__buffer.append(payload)
 		self.__response_size = response_size

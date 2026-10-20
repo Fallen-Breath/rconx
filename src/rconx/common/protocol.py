@@ -1,4 +1,5 @@
 import dataclasses
+import operator
 import struct
 from enum import IntEnum
 from typing import Union
@@ -9,6 +10,7 @@ LENGTH_HEADER = struct.Struct('<i')
 _PACKET_HEADER = struct.Struct('<ii')
 _FRAMED_PACKET_HEADER = struct.Struct('<iii')
 _TERMINATOR = b'\x00\x00'
+_INT32_MAX = (1 << 31) - 1
 MIN_PACKET_BODY_SIZE = _PACKET_HEADER.size + len(_TERMINATOR)
 
 
@@ -26,11 +28,13 @@ class Packet:
 	payload: bytes
 
 	def encode(self) -> bytes:
-		return self.__encode(_PACKET_HEADER.pack(self.request_id, self.packet_type))
+		return self.__encode(_PACKET_HEADER.pack(self.__int32(self.request_id, 'request_id'), self.__int32(self.packet_type, 'packet_type')))
 
 	def encode_framed(self) -> bytes:
 		packet_size = _PACKET_HEADER.size + len(self.payload) + len(_TERMINATOR)
-		return self.__encode(_FRAMED_PACKET_HEADER.pack(packet_size, self.request_id, self.packet_type))
+		return self.__encode(_FRAMED_PACKET_HEADER.pack(
+			self.__int32(packet_size, 'packet_size'), self.__int32(self.request_id, 'request_id'), self.__int32(self.packet_type, 'packet_type'),
+		))
 
 	@classmethod
 	def decode(cls, data: Union[bytes, bytearray]) -> 'Packet':
@@ -52,6 +56,13 @@ class Packet:
 
 	def __encode(self, header: bytes) -> bytes:
 		return b''.join([header, self.payload, _TERMINATOR])
+
+	@staticmethod
+	def __int32(value: int, name: str) -> int:
+		value = operator.index(value)
+		if value < -_INT32_MAX - 1 or value > _INT32_MAX:
+			raise ValueError('{} {} is outside the signed 32-bit integer range'.format(name, value))
+		return value
 
 	@classmethod
 	def __decode(cls, data: Union[bytes, bytearray], offset: int) -> 'Packet':

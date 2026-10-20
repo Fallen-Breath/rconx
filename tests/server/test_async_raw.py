@@ -2,14 +2,15 @@ import asyncio
 import contextlib
 import socket
 from asyncio.base_events import Server
-from typing import Any, Callable, List, Optional, Tuple, cast
+from typing import Any, Callable, List, Optional, Tuple, Type, cast
+from unittest.mock import Mock
 
 import pytest
 from typing_extensions import Unpack
 
 from rconx.common.connection import AsyncConnection
 from rconx.common.connection_options import ConnectionOptions
-from rconx.common.exceptions import RconConnectionError, RconStateError
+from rconx.common.exceptions import RconConnectionError, RconError, RconStateError, RconTimeoutError
 from rconx.common.protocol import Packet
 from rconx.server.raw import AsyncRawRconServer
 from rconx.server.server_connection import AsyncServerConnection
@@ -134,18 +135,114 @@ def test_bind_failure_consumes_serve(run_async: RunAsync, tcp_listener_factory: 
 	run_async(scenario())
 
 
-def test_start_callback_failure_closes_listeners(run_async: RunAsync, async_listeners: List[Server]):
+@pytest.mark.parametrize('failure', [RuntimeError('startup callback'), OSError('startup callback'), socket.timeout('startup callback'), TimeoutError('startup callback')])
+def test_start_callback_failure_closes_listeners(run_async: RunAsync, async_listeners: List[Server], failure: Exception):
 	async def scenario():
-		failure = RuntimeError('startup callback')
 		def fail():
 			raise failure
 		server = AsyncRawRconServer('127.0.0.1', 0, lambda connection: None)
-		with pytest.raises(RuntimeError) as caught:
+		with pytest.raises(type(failure)) as caught:
 			await server.serve(on_started=fail)
 		assert caught.value is failure
 		assert not async_listeners[0].sockets
 		with pytest.raises(RconStateError):
 			await server.serve()
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('failure,expected', [
+	pytest.param(OSError('I/O failed'), RconConnectionError, id='oserror'),
+	pytest.param(socket.timeout('I/O timed out'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('I/O timed out'), RconTimeoutError, id='builtin-timeout'),
+	pytest.param(RconConnectionError('classified failure'), RconConnectionError, id='classified-connection'),
+	pytest.param(RconTimeoutError('classified timeout'), RconTimeoutError, id='classified-timeout'),
+])
+def test_start_io_failure(run_async: RunAsync, monkeypatch: pytest.MonkeyPatch, failure: Exception, expected: Type[Exception]):
+	async def start(*args: Any, **kwargs: Any) -> asyncio.AbstractServer:
+		raise failure
+	monkeypatch.setattr(asyncio, 'start_server', start)
+	async def scenario():
+		server = AsyncRawRconServer('127.0.0.1', 0, lambda connection: None)
+		with pytest.raises(expected) as caught:
+			await server.serve()
+		if isinstance(failure, RconError):
+			assert caught.value is failure
+		else:
+			assert caught.value.__cause__ is failure
+		await server.shutdown()
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('failure,expected', [
+	pytest.param(OSError('I/O failed'), RconConnectionError, id='oserror'),
+	pytest.param(socket.timeout('I/O timed out'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('I/O timed out'), RconTimeoutError, id='builtin-timeout'),
+	pytest.param(RconConnectionError('classified failure'), RconConnectionError, id='classified-connection'),
+	pytest.param(RconTimeoutError('classified timeout'), RconTimeoutError, id='classified-timeout'),
+])
+def test_listener_address_failure_closes_listener(run_async: RunAsync, async_listeners: List[Server], monkeypatch: pytest.MonkeyPatch, failure: Exception, expected: Type[Exception]):
+	start_server = asyncio.start_server
+	async def start(*args: Any, **kwargs: Any) -> asyncio.AbstractServer:
+		listener = Mock(wraps=await start_server(*args, **kwargs))
+		address = Mock()
+		address.getsockname.side_effect = failure
+		listener.sockets = [address]
+		return cast(asyncio.AbstractServer, listener)
+	monkeypatch.setattr(asyncio, 'start_server', start)
+	async def scenario():
+		server = AsyncRawRconServer('127.0.0.1', 0, lambda connection: None)
+		with pytest.raises(expected) as caught:
+			await server.serve()
+		if isinstance(failure, RconError):
+			assert caught.value is failure
+		else:
+			assert caught.value.__cause__ is failure
+		assert not async_listeners[0].sockets
+		await server.shutdown()
+	run_async(scenario())
+
+
+@pytest.mark.parametrize('stage', ['close', 'wait-closed'])
+@pytest.mark.parametrize('failure,expected', [
+	pytest.param(OSError('I/O failed'), RconConnectionError, id='oserror'),
+	pytest.param(socket.timeout('I/O timed out'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('I/O timed out'), RconTimeoutError, id='builtin-timeout'),
+	pytest.param(RconConnectionError('classified failure'), RconConnectionError, id='classified-connection'),
+	pytest.param(RconTimeoutError('classified timeout'), RconTimeoutError, id='classified-timeout'),
+])
+def test_shutdown_io_failure_closes_listener(run_async: RunAsync, async_listeners: List[Server], monkeypatch: pytest.MonkeyPatch, stage: str, failure: Exception, expected: Type[Exception]):
+	start_server = asyncio.start_server
+	async def start(*args: Any, **kwargs: Any) -> asyncio.AbstractServer:
+		listener = await start_server(*args, **kwargs)
+		proxy = Mock(wraps=listener)
+		proxy.sockets = cast(Server, listener).sockets
+		if stage == 'close':
+			def close():
+				listener.close()
+				raise failure
+			proxy.close.side_effect = close
+		else:
+			async def wait_closed():
+				await listener.wait_closed()
+				raise failure
+			proxy.wait_closed.side_effect = wait_closed
+		return cast(asyncio.AbstractServer, proxy)
+	monkeypatch.setattr(asyncio, 'start_server', start)
+	async def scenario():
+		ready = asyncio.Event()
+		server = AsyncRawRconServer('127.0.0.1', 0, lambda connection: None)
+		serve = asyncio.ensure_future(server.serve(on_started=ready.set))
+		await ready.wait()
+		with pytest.raises(expected) as stopped:
+			await server.shutdown()
+		with pytest.raises(expected) as served:
+			await serve
+		for error in (stopped.value, served.value):
+			if isinstance(failure, RconError):
+				assert error is failure
+			else:
+				assert error.__cause__ is failure
+		assert not async_listeners[0].sockets
 	run_async(scenario())
 
 

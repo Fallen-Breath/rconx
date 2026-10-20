@@ -7,7 +7,7 @@ from typing_extensions import Unpack
 
 from rconx.common.connection import AsyncConnection, Connection, ConnectionConfig
 from rconx.common.connection_options import ConnectionOptions
-from rconx.common.exceptions import RconConnectionError, RconTimeoutError
+from rconx.common.exceptions import RconConnectionError, RconStateError, RconTimeoutError
 from rconx.common.protocol import Packet
 from rconx.common.utils import validate_timeout
 
@@ -48,7 +48,7 @@ class RawRconClient:
 		:keyword local_address: The local address to bind, or ``None`` for automatic selection
 		"""
 		if self.__connection is not None and not self.__connection.closed:
-			raise RconConnectionError('client is already connected')
+			raise RconStateError('client is already connected')
 		validate_timeout(timeout)
 		if timeout == 0:
 			raise RconTimeoutError('connection timed out')
@@ -58,7 +58,7 @@ class RawRconClient:
 				timeout=timeout,
 				source_address=None if local_address is None else (local_address.host, local_address.port),
 			)
-		except socket.timeout as err:
+		except (socket.timeout, TimeoutError) as err:
 			raise RconTimeoutError('connection timed out') from err
 		except OSError as err:
 			raise RconConnectionError('failed to connect to {}:{}'.format(self.__config.host, self.__config.port)) from err
@@ -72,6 +72,8 @@ class RawRconClient:
 			)
 		except OSError as err:
 			sock.close()
+			if isinstance(err, (socket.timeout, TimeoutError)):
+				raise RconTimeoutError('TCP connection configuration timed out') from err
 			raise RconConnectionError('failed to configure TCP connection') from err
 		except BaseException:
 			sock.close()
@@ -130,7 +132,7 @@ class RawRconClient:
 
 	def __get_connection(self) -> Connection:
 		if self.__connection is None or self.__connection.closed:
-			raise RconConnectionError('client is not connected')
+			raise RconStateError('client is not connected')
 		return self.__connection
 
 
@@ -154,7 +156,7 @@ class AsyncRawRconClient:
 		:keyword local_address: The local address to bind, or ``None`` for automatic selection
 		"""
 		if self.__connection is not None:
-			raise RconConnectionError('client is already connected')
+			raise RconStateError('client is already connected')
 
 		try:
 			reader, writer = await asyncio.open_connection(
@@ -162,6 +164,8 @@ class AsyncRawRconClient:
 				self.__config.port,
 				local_addr=None if local_address is None else (local_address.host, local_address.port),
 			)
+		except (socket.timeout, TimeoutError) as err:
+			raise RconTimeoutError('connection timed out') from err
 		except OSError as err:
 			raise RconConnectionError('failed to connect to {}:{}'.format(self.__config.host, self.__config.port)) from err
 
@@ -179,6 +183,8 @@ class AsyncRawRconClient:
 		except BaseException as err:
 			connection.abort()
 			await self.aclose()
+			if isinstance(err, (socket.timeout, TimeoutError)):
+				raise RconTimeoutError('TCP connection configuration timed out') from err
 			if isinstance(err, OSError):
 				raise RconConnectionError('failed to configure TCP connection') from err
 			raise
@@ -236,7 +242,7 @@ class AsyncRawRconClient:
 
 	def __get_connection(self) -> AsyncConnection:
 		if self.__connection is None or self.__connection.closed:
-			raise RconConnectionError('client is not connected')
+			raise RconStateError('client is not connected')
 		return self.__connection
 
 	async def __run_operation(self, operation: Awaitable[_ResultT]) -> _ResultT:

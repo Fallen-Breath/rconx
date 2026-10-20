@@ -2,14 +2,14 @@ import socket
 import threading
 from functools import partial
 from queue import Queue
-from typing import Callable, List, Tuple
+from typing import Callable, List, Tuple, Type
 
 import pytest
 from typing_extensions import Unpack
 
 from rconx.common.connection import Connection
 from rconx.common.connection_options import ConnectionOptions
-from rconx.common.exceptions import RconConnectionError, RconStateError
+from rconx.common.exceptions import RconConnectionError, RconError, RconStateError, RconTimeoutError
 from rconx.common.protocol import Packet
 from rconx.server.raw import RawRconServer
 from rconx.server.server_connection import ServerConnection
@@ -129,17 +129,58 @@ def test_bind_failure_consumes_serve(tcp_listener_factory: TcpListenerFactory):
 		server.serve()
 
 
-def test_start_callback_failure_closes_listener(sync_listeners: List[socket.socket]):
-	failure = RuntimeError('startup callback')
+@pytest.mark.parametrize('failure', [RuntimeError('startup callback'), OSError('startup callback'), socket.timeout('startup callback'), TimeoutError('startup callback')])
+def test_start_callback_failure_closes_listener(sync_listeners: List[socket.socket], failure: Exception):
 	def fail():
 		raise failure
 	server = RawRconServer('127.0.0.1', 0, lambda connection: None)
-	with pytest.raises(RuntimeError) as caught:
+	with pytest.raises(type(failure)) as caught:
 		server.serve(on_started=fail)
 	assert caught.value is failure
 	assert sync_listeners[0].fileno() == -1
 	with pytest.raises(RconStateError):
 		server.serve()
+
+
+@pytest.mark.parametrize('stage', ['resolve', 'address', 'accept', 'close'])
+@pytest.mark.parametrize('failure,expected', [
+	pytest.param(OSError('I/O failed'), RconConnectionError, id='oserror'),
+	pytest.param(socket.timeout('I/O timed out'), RconTimeoutError, id='socket-timeout'),
+	pytest.param(TimeoutError('I/O timed out'), RconTimeoutError, id='builtin-timeout'),
+	pytest.param(RconConnectionError('classified failure'), RconConnectionError, id='classified-connection'),
+	pytest.param(RconTimeoutError('classified timeout'), RconTimeoutError, id='classified-timeout'),
+])
+def test_listener_io_failures_close_resources(monkeypatch: pytest.MonkeyPatch, stage: str, failure: Exception, expected: Type[Exception]):
+	listeners: List[socket.socket] = []
+	class FaultyListener(_Socket):
+		def listen(self, backlog: int = 5):
+			super().listen(backlog)
+			listeners.append(self)
+		def getsockname(self):
+			if stage == 'address':
+				raise failure
+			return super().getsockname()
+		def accept(self):
+			raise failure
+		def close(self):
+			was_open = self.fileno() != -1
+			super().close()
+			if stage == 'close' and was_open:
+				raise failure
+	monkeypatch.setattr(socket, 'socket', FaultyListener)
+	if stage == 'resolve':
+		def fail_resolve(*args, **kwargs):
+			raise failure
+		monkeypatch.setattr(socket, 'getaddrinfo', fail_resolve)
+	server = RawRconServer('127.0.0.1', 0, lambda connection: None)
+	with pytest.raises(expected) as caught:
+		server.serve(on_started=server.shutdown if stage == 'close' else None)
+	if isinstance(failure, RconError):
+		assert caught.value is failure
+	else:
+		assert caught.value.__cause__ is failure
+	assert all(listener.fileno() == -1 for listener in listeners)
+	server.shutdown()
 
 
 def test_handoff_failure_keeps_serving(sync_listeners: List[socket.socket]):

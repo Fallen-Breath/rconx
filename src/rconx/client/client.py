@@ -17,7 +17,7 @@ from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.client.raw import AsyncRawRconClient, LocalAddress, RawRconClient
 from rconx.common.connection import ConnectionConfig
 from rconx.common.content import RconContent
-from rconx.common.exceptions import RconStateError
+from rconx.common.exceptions import RconSizeLimitError, RconStateError
 from rconx.common.protocol import LENGTH_HEADER, MIN_PACKET_BODY_SIZE
 from rconx.common.utils import Deadline, validate_packet_size_limit
 
@@ -147,12 +147,12 @@ class _BaseRconClient:
 			raise ValueError('request body contains a null byte at byte offset {}'.format(payload.index(b'\x00')))
 
 		packet_body_size = MIN_PACKET_BODY_SIZE + len(payload)
+		if packet_body_size > _INT32_MAX:
+			raise ValueError('packet body size {} bytes exceeds the protocol size field maximum {} bytes'.format(packet_body_size, _INT32_MAX))
 		packet_size = LENGTH_HEADER.size + packet_body_size
 		maximum_size = self._config.max_send_packet_size
 		if maximum_size is not None and packet_size > maximum_size:
-			raise ValueError('packet size {} exceeds max_send_packet_size {}'.format(packet_size, maximum_size))
-		if packet_body_size > _INT32_MAX:
-			raise ValueError('packet body size {} bytes exceeds the protocol size field maximum {} bytes'.format(packet_body_size, _INT32_MAX))
+			raise RconSizeLimitError('packet size {} exceeds max_send_packet_size {}'.format(packet_size, maximum_size))
 
 		return payload
 

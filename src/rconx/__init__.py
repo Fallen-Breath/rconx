@@ -10,8 +10,10 @@ from rconx.common.exceptions import (
 	RconAuthenticationError,
 	RconConnectionError,
 	RconError,
+	RconOperationError,
 	RconPacketDecodeError,
 	RconProtocolError,
+	RconSizeLimitError,
 	RconStateError,
 	RconTimeoutError,
 )
@@ -60,10 +62,12 @@ __all__ = [
 
 	# Exceptions
 	'RconError',
+	'RconOperationError',
+	'RconStateError',
 	'RconConnectionError',
 	'RconTimeoutError',
-	'RconPacketDecodeError',
 	'RconAuthenticationError',
-	'RconStateError',
+	'RconSizeLimitError',
 	'RconProtocolError',
+	'RconPacketDecodeError',
 ]

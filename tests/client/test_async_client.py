@@ -6,7 +6,7 @@ import pytest
 from rconx.client.client import AsyncRconClient
 from rconx.client.client_options import RconClientOptions
 from rconx.client.preset import RconPreset, RconPresetLiteral
-from rconx.common.exceptions import RconAuthenticationError, RconConnectionError, RconProtocolError, RconStateError
+from rconx.common.exceptions import RconAuthenticationError, RconConnectionError, RconProtocolError, RconSizeLimitError, RconStateError
 from rconx.common.protocol import PacketType
 from tests.support import AsyncRconFactory, PacketReply, RconPeer, RunAsync, TcpListenerFactory, read_async_packet
 
@@ -191,7 +191,7 @@ def test_default_aggregate_response_limit(run_async: RunAsync, async_rcon_factor
 		if unlimited:
 			assert len((await endpoint.client.execute('next')).content) == 4 * 1024 * 1024 + 1
 		else:
-			with pytest.raises(ValueError):
+			with pytest.raises(RconSizeLimitError):
 				await endpoint.client.execute('next')
 			assert not endpoint.client.connected
 
@@ -213,7 +213,7 @@ def test_default_receive_packet_limit(run_async: RunAsync, async_rcon_factory: A
 		if unlimited:
 			assert len((await endpoint.client.execute('next')).content) == 4 * 1024 * 1024 - 13
 		else:
-			with pytest.raises(ValueError):
+			with pytest.raises(RconSizeLimitError):
 				await endpoint.client.execute('next')
 			assert not endpoint.client.connected and endpoint.writer.released
 
@@ -224,7 +224,7 @@ def test_zero_send_limit_rejects_empty_input(run_async: RunAsync, async_rcon_fac
 	async def scenario():
 		endpoint = async_rcon_factory(RconPreset.minecraft, max_send_packet_size=0)
 		await endpoint.client.connect()
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			await endpoint.client.authenticate(b'')
 		assert endpoint.client.connected and not endpoint.client.authenticated
 		assert endpoint.peer.requests == []
@@ -498,7 +498,7 @@ def test_context_lifecycle(run_async: RunAsync, async_rcon_factory: AsyncRconFac
 	pytest.param(b'bad\x00value', ValueError, id='null-bytes'),
 	pytest.param('\u4e2d', UnicodeEncodeError, id='encoding'),
 	pytest.param(1, TypeError, id='wrong-type'),
-	pytest.param(b'x' * 100, ValueError, id='send-limit'),
+	pytest.param(b'x' * 100, RconSizeLimitError, id='send-limit'),
 ])
 def test_input_failure_preserves_session(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, operation: str, body: Any, error: Type[BaseException]):
 	async def scenario():
@@ -529,11 +529,11 @@ def test_preset_send_limit_counts_encoded_bytes(run_async: RunAsync, async_rcon_
 	async def scenario():
 		endpoint = async_rcon_factory(preset)
 		await endpoint.client.connect()
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			await endpoint.client.authenticate(b'x' * (maximum - 13))
 		await endpoint.client.authenticate(b'x' * (maximum - 14))
 		assert endpoint.peer.requests[-1].payload == b'x' * (maximum - 14)
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			await endpoint.client.execute('\u4e2d' * ((maximum - 14) // 3 + 1))
 		assert (await endpoint.client.execute(b'x' * (maximum - 14))).content == b'firstsecond'
 
@@ -549,7 +549,7 @@ def test_send_limit_override(run_async: RunAsync, async_rcon_factory: AsyncRconF
 		payload = b'x' * (4096 if maximum is None else maximum - 14)
 		await endpoint.client.authenticate(payload)
 		if maximum is not None:
-			with pytest.raises(ValueError):
+			with pytest.raises(RconSizeLimitError):
 				await endpoint.client.execute(payload + b'x')
 		assert (await endpoint.client.execute(payload)).content == b'firstsecond'
 
@@ -585,7 +585,7 @@ def test_response_size_limit(run_async: RunAsync, async_rcon_factory: AsyncRconF
 			assert (await endpoint.client.execute('command')).content == b''.join(output)
 			assert endpoint.client.authenticated
 		else:
-			with pytest.raises(ValueError):
+			with pytest.raises(RconSizeLimitError):
 				await endpoint.client.execute('command')
 			assert not endpoint.client.connected and not endpoint.client.authenticated
 			assert endpoint.writer.released
@@ -598,7 +598,7 @@ def test_receive_packet_limit_closes_session(run_async: RunAsync, async_rcon_fac
 		endpoint = async_rcon_factory(max_receive_packet_size=18)
 		await endpoint.client.connect()
 		await endpoint.client.authenticate('password')
-		with pytest.raises(ValueError):
+		with pytest.raises(RconSizeLimitError):
 			await endpoint.client.execute('command')
 		assert not endpoint.client.connected and endpoint.writer.released
 

@@ -12,7 +12,7 @@ from typing_extensions import Protocol, SupportsIndex, Unpack
 
 from rconx.client.client import AsyncRconClient, RconClient
 from rconx.client.client_options import RconClientOptions
-from rconx.client.preset import RconPreset
+from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.client.raw import AsyncRawRconClient
 from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
 from rconx.common.protocol import Packet, PacketType
@@ -541,10 +541,10 @@ class AsyncRconEndpoint:
 
 
 class SyncRconFactory(Protocol):
-	def __call__(self, preset: RconPreset = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
+	def __call__(self, preset: Union[RconPreset, RconPresetLiteral] = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
 		...
 
 
 class AsyncRconFactory(Protocol):
-	def __call__(self, preset: RconPreset = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
+	def __call__(self, preset: Union[RconPreset, RconPresetLiteral] = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
 		...

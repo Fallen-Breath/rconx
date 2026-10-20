@@ -1,13 +1,13 @@
 import asyncio
 import socket
-from typing import Any, Generator, List, Tuple, cast
+from typing import Any, Generator, List, Tuple, Union, cast
 
 import pytest
 from typing_extensions import Unpack
 
 from rconx.client.client import AsyncRconClient, RconClient
 from rconx.client.client_options import RconClientOptions
-from rconx.client.preset import RconPreset
+from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.client.raw import AsyncRawRconClient
 from tests.support import AsyncRawEndpoint, AsyncRconEndpoint, AsyncRconFactory, RconPeer, RconReader, RconSocket, RconWriter, RunAsync, SyncRconEndpoint, SyncRconFactory
 
@@ -22,9 +22,10 @@ def rcon_factory(monkeypatch: pytest.MonkeyPatch) -> Generator[SyncRconFactory, 
 		endpoint.sockets.append(sock)
 		return cast(socket.socket, sock)
 
-	def create(preset: RconPreset = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
+	def create(preset: Union[RconPreset, RconPresetLiteral] = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
 		client = RconClient.create('localhost', len(endpoints) + 1, preset, **kwargs)
-		endpoint = SyncRconEndpoint(client, RconPeer(preset))
+		peer_preset = RconPreset[preset] if isinstance(preset, str) else preset
+		endpoint = SyncRconEndpoint(client, RconPeer(peer_preset))
 		endpoints.append(endpoint)
 		return endpoint
 
@@ -46,9 +47,10 @@ def async_rcon_factory(monkeypatch: pytest.MonkeyPatch, run_async: RunAsync, mem
 		endpoint.writers.append(writer)
 		return reader, cast(asyncio.StreamWriter, writer)
 
-	def create(preset: RconPreset = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
+	def create(preset: Union[RconPreset, RconPresetLiteral] = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
 		client = AsyncRconClient.create('localhost', len(endpoints) + 1, preset, **kwargs)
-		endpoint = AsyncRconEndpoint(client, RconPeer(preset))
+		peer_preset = RconPreset[preset] if isinstance(preset, str) else preset
+		endpoint = AsyncRconEndpoint(client, RconPeer(peer_preset))
 		endpoints.append(endpoint)
 		return endpoint
 

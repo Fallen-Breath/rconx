@@ -1,11 +1,11 @@
 import asyncio
-from typing import Any, List, Optional, Tuple, Type
+from typing import Any, List, Optional, Tuple, Type, Union
 
 import pytest
 
 from rconx.client.client import AsyncRconClient
 from rconx.client.client_options import RconClientOptions
-from rconx.client.preset import RconPreset
+from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.common.exceptions import RconAuthenticationError, RconConnectionError, RconProtocolError, RconStateError
 from rconx.common.protocol import PacketType
 from tests.support import AsyncRconFactory, PacketReply, RconPeer, RunAsync, TcpListenerFactory, read_async_packet
@@ -296,9 +296,9 @@ def test_tcp_preset_exchange(run_async: RunAsync, tcp_listener_factory: TcpListe
 
 
 
-@pytest.mark.parametrize('preset', list(RconPreset))
+@pytest.mark.parametrize('preset', list(RconPreset) + ['srcds', 'minecraft', 'cuberite', 'single_packet'])
 @pytest.mark.parametrize('output', [[b'first', b'', b'second'], [b'']])
-def test_presets_collect_complete_results(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset, output: List[bytes]):
+def test_presets_collect_complete_results(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: Union[RconPreset, RconPresetLiteral], output: List[bytes]):
 	async def scenario():
 		endpoint = async_rcon_factory(preset)
 		endpoint.peer.output = output
@@ -519,8 +519,13 @@ def test_input_failure_preserves_session(run_async: RunAsync, async_rcon_factory
 	run_async(scenario())
 
 
-@pytest.mark.parametrize('preset, maximum', [pytest.param(RconPreset.minecraft, 1460), pytest.param(RconPreset.cuberite, 1504)])
-def test_preset_send_limit_counts_encoded_bytes(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset, maximum: int):
+@pytest.mark.parametrize('preset, maximum', [
+	pytest.param(RconPreset.minecraft, 1460),
+	pytest.param('minecraft', 1460),
+	pytest.param(RconPreset.cuberite, 1504),
+	pytest.param('cuberite', 1504),
+])
+def test_preset_send_limit_counts_encoded_bytes(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: Union[RconPreset, RconPresetLiteral], maximum: int):
 	async def scenario():
 		endpoint = async_rcon_factory(preset)
 		await endpoint.client.connect()
@@ -535,9 +540,9 @@ def test_preset_send_limit_counts_encoded_bytes(run_async: RunAsync, async_rcon_
 	run_async(scenario())
 
 
-@pytest.mark.parametrize('preset', list(RconPreset))
+@pytest.mark.parametrize('preset', list(RconPreset) + ['srcds', 'minecraft', 'cuberite', 'single_packet'])
 @pytest.mark.parametrize('maximum', [None, 14, 100, 4096])
-def test_send_limit_override(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset, maximum: Optional[int]):
+def test_send_limit_override(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: Union[RconPreset, RconPresetLiteral], maximum: Optional[int]):
 	async def scenario():
 		endpoint = async_rcon_factory(preset, max_send_packet_size=maximum)
 		await endpoint.client.connect()
@@ -551,8 +556,8 @@ def test_send_limit_override(run_async: RunAsync, async_rcon_factory: AsyncRconF
 	run_async(scenario())
 
 
-@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.single_packet])
-def test_other_presets_default_send_limit_is_unlimited(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: RconPreset):
+@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.single_packet, 'srcds', 'single_packet'])
+def test_other_presets_default_send_limit_is_unlimited(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, preset: Union[RconPreset, RconPresetLiteral]):
 	async def scenario():
 		endpoint = async_rcon_factory(preset)
 		await endpoint.client.connect()

@@ -9,9 +9,9 @@ The following examples connect to a Minecraft server and execute a command.
 ### Synchronous client
 
 ```python
-from rconx import RconClient, RconPreset
+from rconx import RconClient
 
-with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
+with RconClient.create("127.0.0.1", 25575, "minecraft") as client:
     client.connect_and_authenticate("your-rcon-password")
     response = client.execute("list")
     print(response.text)
@@ -22,11 +22,11 @@ with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
 ```python
 import asyncio
 
-from rconx import AsyncRconClient, RconPreset
+from rconx import AsyncRconClient
 
 
 async def main():
-    async with AsyncRconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
+    async with AsyncRconClient.create("127.0.0.1", 25575, "minecraft") as client:
         await client.connect_and_authenticate("your-rcon-password")
         response = await client.execute("list")
         print(response.text)
@@ -81,7 +81,7 @@ The selected preset determines when result collection finishes.
 
 ## Presets and server compatibility
 
-RCON commands can produce multiple response packets. The `preset` argument to `create` accepts a `RconPreset` value that determines when the client has collected a complete result.
+RCON commands can produce multiple response packets. The required `preset` argument to `create` accepts a `RconPreset` member or its exact name as a string.
 
 | Preset          | Result collection                                                                                                                      |
 |-----------------|----------------------------------------------------------------------------------------------------------------------------------------|
@@ -93,6 +93,8 @@ RCON commands can produce multiple response packets. The `preset` argument to `c
 The client handles the preset's auxiliary responses and excludes them from the returned command output.
 
 ```python
+from rconx import RconPreset
+
 client = RconClient.create("127.0.0.1", 27015, RconPreset.srcds)
 ```
 
@@ -152,7 +154,7 @@ Packet limits count encoded bytes, including the length header. `max_response_si
 
 ```python
 client = RconClient.create(
-    "127.0.0.1", 25575, RconPreset.minecraft,
+    "127.0.0.1", 25575, "minecraft",
     max_response_size=8 * 1024 * 1024,
 )
 ```

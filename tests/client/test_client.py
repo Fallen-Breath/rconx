@@ -7,7 +7,7 @@ import pytest
 
 from rconx.client.client import AsyncRconClient, RconClient
 from rconx.client.client_options import RconClientOptions
-from rconx.client.preset import RconPreset
+from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.common.exceptions import RconAuthenticationError, RconConnectionError, RconProtocolError, RconStateError, RconTimeoutError
 from rconx.common.protocol import PacketType
 from tests.support import Clock, PacketReply, RconPeer, SyncRconFactory, TcpListenerFactory, read_packet
@@ -50,9 +50,9 @@ def test_tcp_preset_exchange(tcp_listener_factory: TcpListenerFactory, preset: R
 		server.result(timeout=3)
 
 
-@pytest.mark.parametrize('preset', list(RconPreset))
+@pytest.mark.parametrize('preset', list(RconPreset) + ['srcds', 'minecraft', 'cuberite', 'single_packet'])
 @pytest.mark.parametrize('output', [[b'first', b'', b'second'], [b'']])
-def test_presets_collect_complete_results(rcon_factory: SyncRconFactory, preset: RconPreset, output: List[bytes]):
+def test_presets_collect_complete_results(rcon_factory: SyncRconFactory, preset: Union[RconPreset, RconPresetLiteral], output: List[bytes]):
 	endpoint = rcon_factory(preset)
 	endpoint.peer.output = output
 	client = endpoint.client
@@ -260,8 +260,13 @@ def test_input_failure_preserves_session(rcon_factory: SyncRconFactory, operatio
 	assert client.execute('command').content == b'firstsecond'
 
 
-@pytest.mark.parametrize('preset, maximum', [pytest.param(RconPreset.minecraft, 1460), pytest.param(RconPreset.cuberite, 1504)])
-def test_preset_send_limit_counts_encoded_bytes(rcon_factory: SyncRconFactory, preset: RconPreset, maximum: int):
+@pytest.mark.parametrize('preset, maximum', [
+	pytest.param(RconPreset.minecraft, 1460),
+	pytest.param('minecraft', 1460),
+	pytest.param(RconPreset.cuberite, 1504),
+	pytest.param('cuberite', 1504),
+])
+def test_preset_send_limit_counts_encoded_bytes(rcon_factory: SyncRconFactory, preset: Union[RconPreset, RconPresetLiteral], maximum: int):
 	endpoint = rcon_factory(preset)
 	endpoint.client.connect()
 	with pytest.raises(ValueError):
@@ -273,9 +278,9 @@ def test_preset_send_limit_counts_encoded_bytes(rcon_factory: SyncRconFactory, p
 	assert endpoint.client.execute(b'x' * (maximum - 14)).content == b'firstsecond'
 
 
-@pytest.mark.parametrize('preset', list(RconPreset))
+@pytest.mark.parametrize('preset', list(RconPreset) + ['srcds', 'minecraft', 'cuberite', 'single_packet'])
 @pytest.mark.parametrize('maximum', [None, 14, 100, 4096])
-def test_send_limit_override(rcon_factory: SyncRconFactory, preset: RconPreset, maximum: Optional[int]):
+def test_send_limit_override(rcon_factory: SyncRconFactory, preset: Union[RconPreset, RconPresetLiteral], maximum: Optional[int]):
 	endpoint = rcon_factory(preset, max_send_packet_size=maximum)
 	endpoint.client.connect()
 	payload = b'x' * (4096 if maximum is None else maximum - 14)
@@ -286,8 +291,8 @@ def test_send_limit_override(rcon_factory: SyncRconFactory, preset: RconPreset, 
 	assert endpoint.client.execute(payload).content == b'firstsecond'
 
 
-@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.single_packet])
-def test_other_presets_default_send_limit_is_unlimited(rcon_factory: SyncRconFactory, preset: RconPreset):
+@pytest.mark.parametrize('preset', [RconPreset.srcds, RconPreset.single_packet, 'srcds', 'single_packet'])
+def test_other_presets_default_send_limit_is_unlimited(rcon_factory: SyncRconFactory, preset: Union[RconPreset, RconPresetLiteral]):
 	endpoint = rcon_factory(preset)
 	endpoint.client.connect()
 	endpoint.client.authenticate(b'x' * 4096)
@@ -573,7 +578,16 @@ def test_invalid_configuration(client_type: Union[Type[RconClient], Type[AsyncRc
 
 
 @pytest.mark.parametrize('client_type', [RconClient, AsyncRconClient])
-@pytest.mark.parametrize('preset', [None, 'minecraft', 1])
-def test_invalid_preset(client_type: Union[Type[RconClient], Type[AsyncRconClient]], preset: Any):
-	with pytest.raises(TypeError):
+@pytest.mark.parametrize('preset, error', [
+	pytest.param('unknown', ValueError, id='unknown-name'),
+	pytest.param('', ValueError, id='empty-name'),
+	pytest.param('Minecraft', ValueError, id='case-mismatch'),
+	pytest.param(' minecraft', ValueError, id='leading-whitespace'),
+	pytest.param('minecraft ', ValueError, id='trailing-whitespace'),
+	pytest.param(None, TypeError, id='none'),
+	pytest.param(1, TypeError, id='integer'),
+	pytest.param(b'minecraft', TypeError, id='bytes'),
+])
+def test_invalid_preset(client_type: Union[Type[RconClient], Type[AsyncRconClient]], preset: Any, error: Type[BaseException]):
+	with pytest.raises(error):
 		client_type.create('localhost', 1, preset)

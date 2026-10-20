@@ -1,5 +1,10 @@
 from enum import Enum, auto
 
+from typing_extensions import Literal
+
+
+RconPresetLiteral = Literal['srcds', 'minecraft', 'cuberite', 'single_packet']
+
 
 class RconPreset(Enum):
 	"""

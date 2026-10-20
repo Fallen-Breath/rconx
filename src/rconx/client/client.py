@@ -13,7 +13,7 @@ from rconx.client.auth.base import AuthenticationHandler
 from rconx.client.client_options import RconClientOptions
 from rconx.client.command.base import CommandHandler
 from rconx.client.operation import AsyncRconOperationContext, RequestIdCounter, RconOperationContext
-from rconx.client.preset import RconPreset
+from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.client.raw import AsyncRawRconClient, LocalAddress, RawRconClient
 from rconx.common.connection import ConnectionConfig
 from rconx.common.content import RconContent
@@ -71,11 +71,19 @@ class _BaseRconClient:
 		self._request_id_counter = RequestIdCounter()
 		self.__operation_lock = threading.Lock()
 
+	@staticmethod
+	def _resolve_preset(preset: Union[RconPreset, RconPresetLiteral]) -> RconPreset:
+		if isinstance(preset, RconPreset):
+			return preset
+		if isinstance(preset, str):
+			try:
+				return RconPreset[preset]
+			except KeyError:
+				raise ValueError('unknown RCON preset {!r}'.format(preset)) from None
+		raise TypeError('preset must be a RconPreset or str, got {}'.format(type(preset).__name__))
+
 	@classmethod
 	def _create_handlers(cls, preset: RconPreset) -> _RconHandlers:
-		if not isinstance(preset, RconPreset):
-			raise TypeError('preset must be a RconPreset, got {}'.format(type(preset).__name__))
-
 		command_handler: CommandHandler
 		if preset == RconPreset.srcds:
 			from rconx.client.command.srcds_handler import SrcdsCommandHandler
@@ -212,7 +220,7 @@ class RconClient(_BaseRconClient):
 
 	@classmethod
 	def create(
-		cls, host: str, port: int, preset: RconPreset,
+		cls, host: str, port: int, preset: Union[RconPreset, RconPresetLiteral],
 		**kwargs: Unpack[RconClientOptions],
 	) -> 'RconClient':
 		"""
@@ -224,8 +232,9 @@ class RconClient(_BaseRconClient):
 		:param kwargs: Encoding and size options from ``RconClientOptions`` that override preset defaults
 		:return: A disconnected client
 		"""
-		handlers = cls._create_handlers(preset)
-		cls._apply_preset_defaults(preset, kwargs)
+		resolved_preset = cls._resolve_preset(preset)
+		handlers = cls._create_handlers(resolved_preset)
+		cls._apply_preset_defaults(resolved_preset, kwargs)
 
 		return cls(
 			host, port,
@@ -354,7 +363,7 @@ class AsyncRconClient(_BaseRconClient):
 
 	@classmethod
 	def create(
-		cls, host: str, port: int, preset: RconPreset,
+		cls, host: str, port: int, preset: Union[RconPreset, RconPresetLiteral],
 		**kwargs: Unpack[RconClientOptions],
 	) -> 'AsyncRconClient':
 		"""
@@ -366,8 +375,9 @@ class AsyncRconClient(_BaseRconClient):
 		:param kwargs: Encoding and size options from ``RconClientOptions`` that override preset defaults
 		:return: A disconnected client
 		"""
-		handlers = cls._create_handlers(preset)
-		cls._apply_preset_defaults(preset, kwargs)
+		resolved_preset = cls._resolve_preset(preset)
+		handlers = cls._create_handlers(resolved_preset)
+		cls._apply_preset_defaults(resolved_preset, kwargs)
 
 		return cls(
 			host, port,

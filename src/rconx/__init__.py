@@ -1,6 +1,6 @@
 from rconx.client.client import AsyncRconClient, RconClient
 from rconx.client.client_options import RconClientOptions
-from rconx.client.preset import RconPreset
+from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.client.raw import AsyncRawRconClient, LocalAddress, RawRconClient
 from rconx.common.connection import AsyncConnection, Connection
 from rconx.common.connection_info import ConnectionAddress, ConnectionInfo
@@ -26,6 +26,7 @@ __all__ = [
 	'RconClient',
 	'AsyncRconClient',
 	'RconPreset',
+	'RconPresetLiteral',
 	'RconClientOptions',
 
 	# Low-level clients

@@ -27,9 +27,9 @@ These examples execute `list` on a Minecraft server with RCON enabled.
 ### Synchronous client
 
 ```python
-from rconx import RconClient, RconPreset
+from rconx import RconClient
 
-with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
+with RconClient.create("127.0.0.1", 25575, "minecraft") as client:
     client.connect_and_authenticate("your-rcon-password")
     response = client.execute("list")
     print(response.text)  # e.g. There are 1 of a max of 20 players online: Steve
@@ -40,11 +40,11 @@ with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
 ```python
 import asyncio
 
-from rconx import AsyncRconClient, RconPreset
+from rconx import AsyncRconClient
 
 
 async def main():
-    async with AsyncRconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
+    async with AsyncRconClient.create("127.0.0.1", 25575, "minecraft") as client:
         await client.connect_and_authenticate("your-rcon-password")
         response = await client.execute("list")
         print(response.text)

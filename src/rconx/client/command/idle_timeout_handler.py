@@ -12,8 +12,9 @@ class IdleTimeoutCommandHandler(CommandHandler):
 	"""
 	**Not public API**
 
-	Quiet-window collection for servers without a usable ending probe, such as Project Zomboid.
-	Waits for the first reply, then ends on a quiet window between packets; completion is heuristic.
+	Collect replies using a quiet interval between complete packets.
+
+	After receiving the first reply, collection ends when no new packet starts within the interval. Completion is heuristic.
 	"""
 	def __init__(self, *, response_idle_timeout: float):
 		if response_idle_timeout is None:

@@ -14,22 +14,22 @@ class RconServerOptions(RawRconServerOptions):
 	"""
 
 	max_connections: NotRequired[Optional[int]]
-	"""Maximum concurrent sessions, including unauthenticated ones; defaults to ``100``. ``None`` disables the limit; excess connections are rejected"""
+	"""Maximum concurrent sessions, including unauthenticated ones (default: ``100``). ``None`` disables the limit"""
 
 	default_encoding: NotRequired[str]
-	"""Text encoding for string passwords, string results and input text access; defaults to ``utf8``"""
+	"""Encoding for string passwords and results, and for decoding input text (default: ``utf8``)"""
 
 	max_response_size: NotRequired[Optional[int]]
-	"""Maximum encoded command result size in bytes; defaults to 4 MiB. ``None`` disables the limit; ``0`` permits only empty results"""
+	"""Maximum encoded command result size in bytes (default: 4 MiB). ``None`` disables the limit"""
 
 	authentication_timeout: NotRequired[Optional[float]]
-	"""Time from accepting a connection to receiving its first complete authentication packet; defaults to ``10``"""
+	"""Timeout from accepting a connection until its first complete authentication packet arrives (default: ``10``)"""
 
 	idle_timeout: NotRequired[Optional[float]]
-	"""Timeout for an authenticated connection waiting for the next request's first byte; defaults to ``None``"""
+	"""Timeout while an authenticated connection waits for the next request's first byte (default: ``None``)"""
 
 	receive_timeout: NotRequired[Optional[float]]
-	"""Timeout for receiving the rest of each packet after its first byte; defaults to ``None``"""
+	"""Timeout for receiving the remainder of each packet after its first byte arrives (default: ``None``)"""
 
 	send_timeout: NotRequired[Optional[float]]
-	"""Timeout for sending each response packet; defaults to ``None``"""
+	"""Timeout for sending each response packet (default: ``None``)"""

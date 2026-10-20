@@ -1,6 +1,6 @@
 class RconContent:
 	"""
-	Read-only byte content; ``str`` returns ``text``
+	Read-only byte content with decoded text access
 
 	:param content: Raw payload bytes
 	:keyword default_encoding: Encoding used for text access, defaulting to ``utf8``

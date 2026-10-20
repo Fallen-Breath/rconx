@@ -107,7 +107,7 @@ class _BaseRconClient:
 	@property
 	def connected(self) -> bool:
 		"""
-		Whether the client holds a connection; does not indicate whether the peer is online
+		Whether the client holds a connection
 		"""
 		return self.__connected
 
@@ -221,7 +221,7 @@ class RconClient(_BaseRconClient):
 		:param host: The remote host name or IP address
 		:param port: The remote TCP port
 		:param preset: The authentication and command exchange preset
-		:param kwargs: Optional encoding and size limits described by ``RconClientOptions``; supplied values override preset defaults
+		:param kwargs: Encoding and size options from ``RconClientOptions`` that override preset defaults
 		:return: A disconnected client
 		"""
 		handlers = cls._create_handlers(preset)
@@ -240,7 +240,7 @@ class RconClient(_BaseRconClient):
 		Establish a TCP connection to the configured target
 
 		:keyword timeout: Timeout per connection attempt in seconds. ``None`` disables the timeout
-		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
+		:keyword local_address: The local address to bind, or ``None`` for automatic selection
 		"""
 		self._ensure_disconnected()
 		self.__raw.connect(timeout=timeout, local_address=local_address)
@@ -268,7 +268,7 @@ class RconClient(_BaseRconClient):
 
 		:param password: Password bytes or text encoded with the client's configured encoding; null bytes are not allowed
 		:keyword timeout: Shared connection and authentication budget in seconds. ``None`` disables the timeout
-		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
+		:keyword local_address: The local address to bind, or ``None`` for automatic selection
 		"""
 		deadline = Deadline(timeout)
 		self.connect(timeout=deadline.get_remaining_or_raise(), local_address=local_address)
@@ -296,7 +296,7 @@ class RconClient(_BaseRconClient):
 	@_exclusive_operation
 	def close(self):
 		"""
-		Close the current connection and clear authentication state; may be called repeatedly
+		Close the current connection and clear authentication state. Repeated calls are allowed
 		"""
 		self.__close()
 
@@ -363,8 +363,8 @@ class AsyncRconClient(_BaseRconClient):
 		:param host: The remote host name or IP address
 		:param port: The remote TCP port
 		:param preset: The authentication and command exchange preset
-		:param kwargs: Optional encoding and size limits described by ``RconClientOptions``; supplied values override preset defaults
-		:return: A disconnected client; this method does not require awaiting
+		:param kwargs: Encoding and size options from ``RconClientOptions`` that override preset defaults
+		:return: A disconnected client
 		"""
 		handlers = cls._create_handlers(preset)
 		cls._apply_preset_defaults(preset, kwargs)
@@ -381,7 +381,7 @@ class AsyncRconClient(_BaseRconClient):
 		"""
 		Establish a TCP connection to the configured target
 
-		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
+		:keyword local_address: The local address to bind, or ``None`` for automatic selection
 		"""
 		self._ensure_disconnected()
 		await self.__raw.connect(local_address=local_address)
@@ -406,7 +406,7 @@ class AsyncRconClient(_BaseRconClient):
 		Establish an authenticated connection to the configured target
 
 		:param password: Password bytes or text encoded with the client's configured encoding; null bytes are not allowed
-		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
+		:keyword local_address: The local address to bind, or ``None`` for automatic selection
 		"""
 		await self.connect(local_address=local_address)
 		await self.authenticate(password)
@@ -435,7 +435,7 @@ class AsyncRconClient(_BaseRconClient):
 	@_exclusive_operation
 	async def aclose(self):
 		"""
-		Close the current connection and clear authentication state; may be called repeatedly
+		Close the current connection and clear authentication state. Repeated calls are allowed
 		"""
 		await self.__aclose()
 

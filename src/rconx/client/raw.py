@@ -35,7 +35,7 @@ class RawRconClient:
 		:param host: The remote host name or IP address
 		:param port: The remote TCP port
 		:keyword max_send_packet_size: Maximum sent packet size in bytes, including the length header. ``None`` disables the limit
-		:keyword max_receive_packet_size: Maximum received packet size in bytes, including the length header. ``None`` disables the limit; defaults to 4 MiB
+		:keyword max_receive_packet_size: Maximum received packet size in bytes, including the length header, with a default of 4 MiB. ``None`` disables the limit
 		"""
 		self.__config = _RawRconClientConfig(host, port, ConnectionConfig(**kwargs))
 		self.__connection: Optional[Connection] = None
@@ -45,7 +45,7 @@ class RawRconClient:
 		Establish a TCP connection to the configured target
 
 		:keyword timeout: Timeout per connection attempt in seconds. ``None`` disables the timeout
-		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
+		:keyword local_address: The local address to bind, or ``None`` for automatic selection
 		"""
 		if self.__connection is not None and not self.__connection.closed:
 			raise RconConnectionError('client is already connected')
@@ -142,7 +142,7 @@ class AsyncRawRconClient:
 		:param host: The remote host name or IP address
 		:param port: The remote TCP port
 		:keyword max_send_packet_size: Maximum sent packet size in bytes, including the length header. ``None`` disables the limit
-		:keyword max_receive_packet_size: Maximum received packet size in bytes, including the length header. ``None`` disables the limit; defaults to 4 MiB
+		:keyword max_receive_packet_size: Maximum received packet size in bytes, including the length header, with a default of 4 MiB. ``None`` disables the limit
 		"""
 		self.__config = _RawRconClientConfig(host, port, ConnectionConfig(**kwargs))
 		self.__connection: Optional[AsyncConnection] = None
@@ -151,7 +151,7 @@ class AsyncRawRconClient:
 		"""
 		Establish a TCP connection to the configured target
 
-		:keyword local_address: The local binding address. ``None`` selects it automatically; port ``0`` selects an available port
+		:keyword local_address: The local address to bind, or ``None`` for automatic selection
 		"""
 		if self.__connection is not None:
 			raise RconConnectionError('client is already connected')

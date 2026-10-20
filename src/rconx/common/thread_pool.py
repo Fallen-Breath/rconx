@@ -67,11 +67,10 @@ class ThreadPool:
 		"""
 		Accept a no-argument task without waiting for execution capacity
 
-		The caller handles task results and exceptions through the future.
-		Future completion does not imply worker availability or thread exit.
+		The caller retrieves the task's result or exception through the returned future.
 
 		:param func: Callable to execute in a worker
-		:return: Task future, or ``None`` when capacity is unavailable; a rejected task is never executed
+		:return: A future for the accepted task, or ``None`` if no capacity is available
 		:raises RuntimeError: If the pool has stopped accepting tasks
 		"""
 		if not callable(func):
@@ -97,9 +96,11 @@ class ThreadPool:
 
 	def shutdown(self, *, wait: bool = True):
 		"""
-		Stop accepting tasks without cancelling accepted work; calls may be repeated
+		Stop accepting tasks while allowing accepted work to finish
 
-		:keyword wait: Wait for tasks and all worker threads to exit; use ``False`` inside a worker
+		Repeated calls can wait for work left running by an earlier call.
+
+		:keyword wait: Whether to wait for tasks and worker threads to exit. A worker must use ``False``
 		:raises RuntimeError: If a worker requests waiting for its own exit
 		"""
 		with self.__lock:

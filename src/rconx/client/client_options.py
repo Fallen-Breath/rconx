@@ -14,4 +14,4 @@ class RconClientOptions(ConnectionOptions):
 	"""Text encoding for string input and response text; defaults to ``utf8``"""
 
 	max_response_size: NotRequired[Optional[int]]
-	"""Maximum accumulated response payload size in bytes. ``None`` disables the limit; defaults to 4 MiB"""
+	"""Maximum accumulated response payload size in bytes, with a default of 4 MiB. ``None`` disables the limit"""

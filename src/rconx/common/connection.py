@@ -118,7 +118,7 @@ class Connection(__BaseConnection):
 
 	def get_info(self) -> ConnectionInfo:
 		"""
-		Return a read-only snapshot of both endpoint addresses; requires an open connection
+		Return a read-only snapshot of the open connection's local and remote addresses
 		"""
 		sock = self.__get_socket()
 		local, remote = sock.getsockname(), sock.getpeername()
@@ -292,7 +292,7 @@ class AsyncConnection(__BaseConnection):
 
 	def get_info(self) -> ConnectionInfo:
 		"""
-		Return a read-only snapshot of both endpoint addresses; requires an open connection
+		Return a read-only snapshot of the open connection's local and remote addresses
 		"""
 		writer = self.__get_stream().writer
 		local, remote = writer.get_extra_info('sockname'), writer.get_extra_info('peername')

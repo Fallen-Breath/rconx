@@ -49,7 +49,7 @@ class RconServer:
 		:param host: Local host name or IP address
 		:param port: Local TCP port
 		:keyword authentication: Fixed ``str``/``bytes`` password, or callback returning ``bool``
-		:keyword command_handler: Callback returning ``bytes`` or ``str``; encoded output must not contain NUL
+		:keyword command_handler: Callback returning ``bytes`` or ``str`` whose encoded result contains no NUL
 		:param kwargs: Options described by ``RconServerOptions``
 		"""
 		config = ServerConfig(**kwargs)
@@ -100,10 +100,10 @@ class RconServer:
 
 	def shutdown(self):
 		"""
-		Stop accepting connections and close existing connections without waiting for callbacks
+		Stop accepting connections and close existing connections
 
-		May be called from another thread or a callback. Repeated calls are allowed;
-		calls before ``serve`` have no effect. Wait for ``serve`` to exit for complete shutdown.
+		This method returns without waiting for active callbacks. Shutdown completes when ``serve`` exits.
+		Calls from another thread or a callback are supported. Repeated calls are allowed, and calls before ``serve`` have no effect.
 		"""
 		with self.__lock:
 			if not self.__serve_called:
@@ -142,7 +142,7 @@ class AsyncRconServer:
 		:param host: Local host name or IP address
 		:param port: Local TCP port
 		:keyword authentication: Fixed ``str``/``bytes`` password, or async callback returning ``bool``
-		:keyword command_handler: Async callback returning ``bytes`` or ``str``; encoded output must not contain NUL
+		:keyword command_handler: Async callback returning ``bytes`` or ``str`` whose encoded result contains no NUL
 		:param kwargs: Options described by ``RconServerOptions``
 		"""
 		config = ServerConfig(**kwargs)
@@ -191,8 +191,8 @@ class AsyncRconServer:
 		"""
 		Stop accepting connections, close existing connections and request callback cancellation
 
-		Does not wait for callbacks; await ``serve`` to exit for complete shutdown.
-		May be called from a callback. Repeated calls are allowed; calls before ``serve`` have no effect.
+		This method returns without waiting for callbacks. Shutdown completes when ``serve`` exits.
+		Calls from a callback are supported. Repeated calls are allowed, and calls before ``serve`` have no effect.
 		"""
 		if not self.__serve_called:
 			return

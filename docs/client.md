@@ -11,9 +11,9 @@ The following examples connect to a Minecraft server and execute a command.
 ```python
 from rconx import RconClient
 
-with RconClient.create("127.0.0.1", 25575, "minecraft") as client:
-    client.connect_and_authenticate("your-rcon-password")
-    response = client.execute("list")
+with RconClient.create('127.0.0.1', 25575, 'minecraft') as client:
+    client.connect_and_authenticate('your-rcon-password')
+    response = client.execute('list')
     print(response.text)
 ```
 
@@ -26,9 +26,9 @@ from rconx import AsyncRconClient
 
 
 async def main():
-    async with AsyncRconClient.create("127.0.0.1", 25575, "minecraft") as client:
-        await client.connect_and_authenticate("your-rcon-password")
-        response = await client.execute("list")
+    async with AsyncRconClient.create('127.0.0.1', 25575, 'minecraft') as client:
+        await client.connect_and_authenticate('your-rcon-password')
+        response = await client.execute('list')
         print(response.text)
 
 
@@ -70,7 +70,7 @@ Passwords and commands accept `str` or `bytes`. The `default_encoding` keyword a
 | `text`    | The result decoded strictly using the client's configured encoding. |
 
 ```python
-response = client.execute("list")
+response = client.execute('list')
 print(response.text)
 print(response.content)
 ```
@@ -95,7 +95,7 @@ The client handles the preset's auxiliary responses and excludes them from the r
 ```python
 from rconx import RconPreset
 
-client = RconClient.create("127.0.0.1", 27015, RconPreset.srcds)
+client = RconClient.create('127.0.0.1', 27015, RconPreset.srcds)
 ```
 
 ### Server compatibility
@@ -135,7 +135,7 @@ The following server versions have been tested with the listed presets.
 The default `None` disables the timeout. Receiving another packet does not renew an authentication or command timeout.
 
 ```python
-response = client.execute("list", timeout=5)
+response = client.execute('list', timeout=5)
 ```
 
 `AsyncRconClient` uses caller-controlled asyncio timeouts, such as `asyncio.wait_for`. Cancellation during authentication or command execution closes the connection and propagates to the caller.
@@ -154,7 +154,7 @@ Packet limits count encoded bytes, including the length header. `max_response_si
 
 ```python
 client = RconClient.create(
-    "127.0.0.1", 25575, "minecraft",
+    '127.0.0.1', 25575, 'minecraft',
     max_response_size=8 * 1024 * 1024,
 )
 ```
@@ -190,9 +190,9 @@ The application can restore the connection after a transport failure:
 from rconx import RconConnectionError
 
 try:
-    client.execute("list")
+    client.execute('list')
 except RconConnectionError:
-    client.connect_and_authenticate("your-rcon-password")
+    client.connect_and_authenticate('your-rcon-password')
 ```
 
 ## Low-level clients
@@ -206,9 +206,9 @@ This example sends a Minecraft authentication request and reads its response as 
 ```python
 from rconx import Packet, PacketType, RawRconClient
 
-with RawRconClient("127.0.0.1", 25575) as client:
+with RawRconClient('127.0.0.1', 25575) as client:
     client.connect()
-    client.send_packet(Packet(1, PacketType.auth, b"your-rcon-password"))
+    client.send_packet(Packet(1, PacketType.auth, b'your-rcon-password'))
     response = client.receive_packet()
     print(response)
 ```

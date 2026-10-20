@@ -20,6 +20,8 @@ python -m pip install rconx
 
 ## Quick start
 
+Application code should import public APIs directly from `rconx`. Only these public exports are guaranteed to remain stable across releases. Internal modules such as `rconx.client` are outside this guarantee.
+
 These examples execute `list` on a Minecraft server with RCON enabled.
 
 ### Synchronous client
@@ -30,7 +32,7 @@ from rconx import RconClient, RconPreset
 with RconClient.create("127.0.0.1", 25575, RconPreset.minecraft) as client:
     client.connect_and_authenticate("your-rcon-password")
     response = client.execute("list")
-    print(response.text)
+    print(response.text)  # e.g. There are 1 of a max of 20 players online: Steve
 ```
 
 ### Asynchronous client

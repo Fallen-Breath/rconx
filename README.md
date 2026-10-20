@@ -55,9 +55,9 @@ asyncio.run(main())
 
 ## Documentation
 
-- The [client guide](docs/client.md) describes client usage, presets, command results, and error handling. It also records compatibility and testing status for individual servers.
-- The [server guide](docs/server.md) describes business callbacks, connection handling, and service lifecycle.
-- The [command-line guide](docs/cli.md) describes installation, command execution, interactive mode, and output handling.
+- The [client guide](https://github.com/Fallen-Breath/rconx/blob/master/docs/client.md) describes client usage, presets, command results, and error handling. It also records compatibility and testing status for individual servers.
+- The [server guide](https://github.com/Fallen-Breath/rconx/blob/master/docs/server.md) describes business callbacks, connection handling, and service lifecycle.
+- The [command-line guide](https://github.com/Fallen-Breath/rconx/blob/master/docs/cli.md) describes installation, command execution, interactive mode, and output handling.
 
 ## License
 

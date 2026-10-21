@@ -1,6 +1,6 @@
 [project]
 name = "rconx"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Python Source RCON protocol library with clients for various game servers and built-in server support"
 
 license = "LGPL-3.0-only"

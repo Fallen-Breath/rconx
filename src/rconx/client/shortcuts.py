@@ -11,7 +11,7 @@ from rconx.common.utils import Deadline
 
 def execute(host: str, port: int, command: Union[str, bytes], **kwargs: Unpack[SyncRconExecuteOptions]) -> RconContent:
 	"""
-	Connect, authenticate and execute one command, closing the connection on success or failure
+	Connect, authenticate and execute one command, closing the connection when the call ends
 
 	Connection, authentication and command exchange share the ``timeout`` budget.
 
@@ -30,7 +30,7 @@ def execute(host: str, port: int, command: Union[str, bytes], **kwargs: Unpack[S
 
 async def execute_async(host: str, port: int, command: Union[str, bytes], **kwargs: Unpack[AsyncRconExecuteOptions]) -> RconContent:
 	"""
-	Connect, authenticate and execute one command, closing the connection on success or failure
+	Connect, authenticate and execute one command, closing the connection when the call ends
 
 	Timeouts and cancellation are controlled by the caller through asyncio.
 

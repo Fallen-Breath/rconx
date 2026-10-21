@@ -7,6 +7,7 @@ from rconx.client.preset import RconPreset, RconPresetLiteral
 
 class RconClientOptions(TypedDict):
 	preset: Union[RconPreset, RconPresetLiteral]
+	"""Required preset for authentication, command exchange and default size limits, supplied as a ``RconPreset`` member or its exact name"""
 
 	max_send_packet_size: NotRequired[Optional[int]]
 	"""Maximum sent packet size in bytes, including the length header. ``None`` disables the limit"""

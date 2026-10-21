@@ -29,10 +29,6 @@ _ClientMethod = TypeVar('_ClientMethod', bound=Callable[..., Any])
 
 
 class _RconBaseClientOptions(ConnectionOptions):
-	"""
-	Optional high-level client keyword arguments, including the fields of ``ConnectionOptions``
-	"""
-
 	default_encoding: NotRequired[str]
 	"""Text encoding for string input and response text; defaults to ``utf8``"""
 
@@ -256,8 +252,7 @@ class RconClient(_BaseRconClient):
 
 		:param host: The remote host name or IP address
 		:param port: The remote TCP port
-		:param preset: The authentication and command exchange preset
-		:param kwargs: Encoding and size options from ``RconClientOptions`` that override preset defaults
+		:param kwargs: Options described by ``RconClientOptions``
 		:return: A disconnected client
 		"""
 		return cls(host, port, **cls._prepare_init_options(kwargs))
@@ -390,8 +385,7 @@ class AsyncRconClient(_BaseRconClient):
 
 		:param host: The remote host name or IP address
 		:param port: The remote TCP port
-		:param preset: The authentication and command exchange preset
-		:param kwargs: Encoding and size options from ``RconClientOptions`` that override preset defaults
+		:param kwargs: Options described by ``RconClientOptions``
 		:return: A disconnected client
 		"""
 		return cls(host, port, **cls._prepare_init_options(kwargs))

@@ -4,10 +4,6 @@ from typing_extensions import NotRequired, TypedDict
 
 
 class RawRconServerOptions(TypedDict):
-	"""
-	Optional server keyword arguments, including ``ConnectionOptions``
-	"""
-
 	max_send_packet_size: NotRequired[Optional[int]]
 	"""Maximum sent packet size in bytes, including the length header. ``None`` disables the limit"""
 

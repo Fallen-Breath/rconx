@@ -4,15 +4,8 @@ from typing_extensions import NotRequired, TypedDict
 
 
 class RconServerOptions(TypedDict):
-	"""
-	Options for high-level RCON servers, including ``RawRconServerOptions``
-
-	Both packet-size limits default to 4100 bytes, including the length header.
-	Timeouts are in seconds. ``None`` disables the corresponding timeout.
-	"""
-
 	max_send_packet_size: NotRequired[Optional[int]]
-	"""Maximum sent packet size in bytes, including the length header. ``None`` disables the limit"""
+	"""Maximum sent packet size in bytes, including the length header (default: 4100 bytes). ``None`` disables the limit"""
 
 	max_receive_packet_size: NotRequired[Optional[int]]
 	"""Maximum received packet size in bytes, including the length header (default: 4100 bytes). ``None`` disables the limit"""
@@ -30,13 +23,13 @@ class RconServerOptions(TypedDict):
 	"""Maximum encoded command result size in bytes (default: 4 MiB). ``None`` disables the limit"""
 
 	authentication_timeout: NotRequired[Optional[float]]
-	"""Timeout from accepting a connection until its first complete authentication packet arrives (default: ``10``)"""
+	"""Timeout in seconds from accepting a connection until its first complete authentication packet arrives (default: ``10``). ``None`` disables the timeout"""
 
 	idle_timeout: NotRequired[Optional[float]]
-	"""Timeout while an authenticated connection waits for the next request's first byte (default: ``None``)"""
+	"""Timeout in seconds while an authenticated connection waits for the next request's first byte (default: ``None``). ``None`` disables the timeout"""
 
 	receive_timeout: NotRequired[Optional[float]]
-	"""Timeout for receiving the remainder of each packet after its first byte arrives (default: ``None``)"""
+	"""Timeout in seconds for receiving the remainder of each packet after its first byte arrives (default: ``None``). ``None`` disables the timeout"""
 
 	send_timeout: NotRequired[Optional[float]]
-	"""Timeout for sending each response packet (default: ``None``)"""
+	"""Timeout in seconds for sending each response packet (default: ``None``). ``None`` disables the timeout"""

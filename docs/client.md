@@ -1,17 +1,46 @@
 # Client guide
 
-`RconClient` and `AsyncRconClient` are high-level clients for authenticating with an RCON server, executing commands, and collecting results. Applications that implement their own protocol interactions can use the [low-level clients](#low-level-clients).
+rconx provides synchronous and asynchronous interfaces for authenticating with an RCON server, executing commands, and collecting results. Applications that implement their own protocol interactions can use the [low-level clients](#low-level-clients).
+
+## Executing one command
+
+`rconx.execute` and `rconx.execute_async` run one command on a new connection and close it when the call ends. These examples execute `list` on a Minecraft server with RCON enabled.
+
+### Synchronous
+
+```python
+import rconx
+
+response = rconx.execute('127.0.0.1', 25575, 'list', password='your-rcon-password', preset='minecraft')
+print(response.text)
+```
+
+### Asynchronous
+
+```python
+import asyncio
+
+import rconx
+
+
+async def main():
+    response = await rconx.execute_async('127.0.0.1', 25575, 'list', password='your-rcon-password', preset='minecraft')
+    print(response.text)
+
+
+asyncio.run(main())
+```
 
 ## Using a client
 
-The following examples connect to a Minecraft server and execute a command.
+Use `RconClient` or `AsyncRconClient` to manage connection and authentication explicitly and reuse the same session for further commands.
 
 ### Synchronous client
 
 ```python
 from rconx import RconClient
 
-with RconClient.create('127.0.0.1', 25575, 'minecraft') as client:
+with RconClient.create('127.0.0.1', 25575, preset='minecraft') as client:
     client.connect_and_authenticate('your-rcon-password')
     response = client.execute('list')
     print(response.text)
@@ -26,7 +55,7 @@ from rconx import AsyncRconClient
 
 
 async def main():
-    async with AsyncRconClient.create('127.0.0.1', 25575, 'minecraft') as client:
+    async with AsyncRconClient.create('127.0.0.1', 25575, preset='minecraft') as client:
         await client.connect_and_authenticate('your-rcon-password')
         response = await client.execute('list')
         print(response.text)
@@ -60,9 +89,9 @@ A client runs one operation at a time. Overlapping calls raise `RconStateError`.
 
 ## Command results
 
-Passwords and commands accept `str` or `bytes`. The `default_encoding` keyword argument to `create` sets the encoding for string inputs and defaults to `utf8`. Byte inputs are sent unchanged.
+Passwords and commands accept `str` or `bytes`. `rconx.execute`, `rconx.execute_async` and the clients' `create` methods accept `default_encoding` to set the encoding for string inputs, with a default of `utf8`. Byte inputs are sent unchanged.
 
-`execute` returns an `RconContent` containing the collected command output:
+Command execution returns an `RconContent` containing the collected output:
 
 | Property  | Meaning                                                             |
 |-----------|---------------------------------------------------------------------|
@@ -75,13 +104,13 @@ print(response.text)
 print(response.content)
 ```
 
-Accessing `text` can raise `UnicodeDecodeError`. Command execution has already completed at that point, and the decoding error leaves the client connected. The original bytes remain available through `content`.
+The result remains usable after the connection closes. If `text` raises `UnicodeDecodeError`, the original bytes remain available through `content`, and an existing client connection is unaffected.
 
 The selected preset determines when result collection finishes.
 
 ## Presets and server compatibility
 
-RCON commands can produce multiple response packets. The required `preset` argument to `create` accepts a `RconPreset` member or its exact name as a string.
+RCON commands can produce multiple response packets. `rconx.execute`, `rconx.execute_async` and the clients' `create` methods require a `preset` keyword argument, which accepts a `RconPreset` member or its exact name as a string.
 
 | Preset          | Result collection                                                                                                                      |
 |-----------------|----------------------------------------------------------------------------------------------------------------------------------------|
@@ -95,7 +124,7 @@ The client handles the preset's auxiliary responses and excludes them from the r
 ```python
 from rconx import RconPreset
 
-client = RconClient.create('127.0.0.1', 27015, RconPreset.srcds)
+client = RconClient.create('127.0.0.1', 27015, preset=RconPreset.srcds)
 ```
 
 ### Server compatibility
@@ -132,17 +161,19 @@ The following server versions have been tested with the listed presets.
 
 `connect_and_authenticate` uses the time remaining after connecting for authentication. Connection establishment retains the timeout scope of `connect`.
 
+The library-level `rconx.execute` function shares one `timeout` budget across connection, authentication, and command exchange. Its connection attempts follow the same timeout scope as `connect`.
+
 The default `None` disables the timeout. Receiving another packet does not renew an authentication or command timeout.
 
 ```python
 response = client.execute('list', timeout=5)
 ```
 
-`AsyncRconClient` uses caller-controlled asyncio timeouts, such as `asyncio.wait_for`. Cancellation during authentication or command execution closes the connection and propagates to the caller.
+`rconx.execute_async` and `AsyncRconClient` use caller-controlled asyncio timeouts, such as `asyncio.wait_for`. Cancellation during authentication or command execution closes the connection and propagates to the caller.
 
 ### Size limits
 
-These settings are keyword arguments to `create`:
+`rconx.execute`, `rconx.execute_async` and the clients' `create` methods accept these keyword arguments:
 
 | Setting                   | Default                                                                 | Scope                                  |
 |---------------------------|-------------------------------------------------------------------------|----------------------------------------|
@@ -154,7 +185,7 @@ Packet limits count encoded bytes, including the length header. `max_response_si
 
 ```python
 client = RconClient.create(
-    '127.0.0.1', 25575, 'minecraft',
+    '127.0.0.1', 25575, preset='minecraft',
     max_response_size=8 * 1024 * 1024,
 )
 ```
@@ -183,9 +214,9 @@ Argument validation can also raise `TypeError` or `ValueError`. Caller-controlle
 | An `authenticate` or `execute` call is rejected before its exchange begins. | The existing state is preserved.                     |
 | An authentication or command exchange fails.                                | The connection closes and authentication is cleared. |
 
-After a communication failure, the same client can connect and authenticate again. rconx does not automatically reconnect or resend commands. A command may have executed before its response was lost, so the application decides whether repeating it is appropriate.
+After a communication failure, a client instance can connect and authenticate again. rconx does not automatically reconnect or resend commands. A command may have executed before its response was lost, so the application decides whether repeating it is appropriate.
 
-The application can restore the connection after a transport failure:
+An application using a client instance can restore the connection after a transport failure:
 
 ```python
 from rconx import RconConnectionError

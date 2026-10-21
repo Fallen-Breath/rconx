@@ -24,33 +24,23 @@ Application code should import public APIs directly from `rconx`. Only these pub
 
 These examples execute `list` on a Minecraft server with RCON enabled.
 
-### Synchronous client
+### Synchronous
 
 ```python
-from rconx import RconClient
+import rconx
 
-with RconClient.create('127.0.0.1', 25575, 'minecraft') as client:
-    client.connect_and_authenticate('your-rcon-password')
-    response = client.execute('list')
-    print(response.text)  # e.g. There are 1 of a max of 20 players online: Steve
+print(rconx.execute('127.0.0.1', 25575, 'list', password='your-rcon-password', preset='minecraft').text)
 ```
 
-### Asynchronous client
+### Asynchronous
 
 ```python
 import asyncio
 
-from rconx import AsyncRconClient
+import rconx
 
-
-async def main():
-    async with AsyncRconClient.create('127.0.0.1', 25575, 'minecraft') as client:
-        await client.connect_and_authenticate('your-rcon-password')
-        response = await client.execute('list')
-        print(response.text)
-
-
-asyncio.run(main())
+response = asyncio.run(rconx.execute_async('127.0.0.1', 25575, 'list', password='your-rcon-password', preset='minecraft'))
+print(response.text)
 ```
 
 ## Documentation

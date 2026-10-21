@@ -56,7 +56,7 @@ Commands execute in order on the same authenticated connection. A failure ends t
 To set the default password in Bash:
 
 ```sh
-export RCONX_PASSWORD="your-rcon-password"
+export RCONX_PASSWORD="MY_PASSWORD"
 ```
 
 The password source is selected as follows:

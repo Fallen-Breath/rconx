@@ -11,7 +11,7 @@ rconx provides synchronous and asynchronous interfaces for authenticating with a
 ```python
 import rconx
 
-response = rconx.execute('127.0.0.1', 25575, 'list', password='your-rcon-password', preset='minecraft')
+response = rconx.execute('127.0.0.1', 25575, 'list', password='MY_PASSWORD', preset='minecraft')
 print(response.text)
 ```
 
@@ -24,7 +24,7 @@ import rconx
 
 
 async def main():
-    response = await rconx.execute_async('127.0.0.1', 25575, 'list', password='your-rcon-password', preset='minecraft')
+    response = await rconx.execute_async('127.0.0.1', 25575, 'list', password='MY_PASSWORD', preset='minecraft')
     print(response.text)
 
 
@@ -41,7 +41,7 @@ Use `RconClient` or `AsyncRconClient` to manage connection and authentication ex
 from rconx import RconClient
 
 with RconClient.create('127.0.0.1', 25575, preset='minecraft') as client:
-    client.connect_and_authenticate('your-rcon-password')
+    client.connect_and_authenticate('MY_PASSWORD')
     response = client.execute('list')
     print(response.text)
 ```
@@ -56,7 +56,7 @@ from rconx import AsyncRconClient
 
 async def main():
     async with AsyncRconClient.create('127.0.0.1', 25575, preset='minecraft') as client:
-        await client.connect_and_authenticate('your-rcon-password')
+        await client.connect_and_authenticate('MY_PASSWORD')
         response = await client.execute('list')
         print(response.text)
 
@@ -224,7 +224,7 @@ from rconx import RconConnectionError
 try:
     client.execute('list')
 except RconConnectionError:
-    client.connect_and_authenticate('your-rcon-password')
+    client.connect_and_authenticate('MY_PASSWORD')
 ```
 
 ## Low-level clients
@@ -240,7 +240,7 @@ from rconx import Packet, PacketType, RawRconClient
 
 with RawRconClient('127.0.0.1', 25575) as client:
     client.connect()
-    client.send_packet(Packet(1, PacketType.auth, b'your-rcon-password'))
+    client.send_packet(Packet(1, PacketType.auth, b'MY_PASSWORD'))
     response = client.receive_packet()
     print(response)
 ```

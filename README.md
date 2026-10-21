@@ -29,7 +29,8 @@ These examples execute `list` on a Minecraft server with RCON enabled.
 ```python
 import rconx
 
-print(rconx.execute('127.0.0.1', 25575, 'list', password='your-rcon-password', preset='minecraft').text)
+response = rconx.execute('127.0.0.1', 25575, 'list', password='MY_PASSWORD', preset='minecraft')
+print(response.text)
 ```
 
 ### Asynchronous
@@ -39,8 +40,13 @@ import asyncio
 
 import rconx
 
-response = asyncio.run(rconx.execute_async('127.0.0.1', 25575, 'list', password='your-rcon-password', preset='minecraft'))
-print(response.text)
+
+async def main():
+    response = await rconx.execute_async('127.0.0.1', 25575, 'list', password='MY_PASSWORD', preset='minecraft')
+    print(response.text)
+
+
+asyncio.run(main())
 ```
 
 ## Documentation

@@ -1,17 +1,24 @@
 from typing import Optional
 
-from typing_extensions import NotRequired
-
-from rconx.server.raw_options import RawRconServerOptions
+from typing_extensions import NotRequired, TypedDict
 
 
-class RconServerOptions(RawRconServerOptions):
+class RconServerOptions(TypedDict):
 	"""
 	Options for high-level RCON servers, including ``RawRconServerOptions``
 
 	Both packet-size limits default to 4100 bytes, including the length header.
 	Timeouts are in seconds. ``None`` disables the corresponding timeout.
 	"""
+
+	max_send_packet_size: NotRequired[Optional[int]]
+	"""Maximum sent packet size in bytes, including the length header. ``None`` disables the limit"""
+
+	max_receive_packet_size: NotRequired[Optional[int]]
+	"""Maximum received packet size in bytes, including the length header (default: 4100 bytes). ``None`` disables the limit"""
+
+	backlog: NotRequired[int]
+	"""Non-negative pending connection queue size with a default of ``5``"""
 
 	max_connections: NotRequired[Optional[int]]
 	"""Maximum concurrent sessions, including unauthenticated ones (default: ``100``). ``None`` disables the limit"""

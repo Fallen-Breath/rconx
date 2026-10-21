@@ -7,7 +7,7 @@ import threading
 from types import TracebackType
 from typing import Any, Awaitable, Callable, Generator, Optional, Type, TypeVar, Union, cast
 
-from typing_extensions import Unpack
+from typing_extensions import NotRequired, Unpack
 
 from rconx.client.auth.base import AuthenticationHandler
 from rconx.client.client_options import RconClientOptions
@@ -16,6 +16,7 @@ from rconx.client.operation import AsyncRconOperationContext, RequestIdCounter, 
 from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.client.raw import AsyncRawRconClient, LocalAddress, RawRconClient
 from rconx.common.connection import ConnectionConfig
+from rconx.common.connection_options import ConnectionOptions
 from rconx.common.content import RconContent
 from rconx.common.exceptions import RconSizeLimitError, RconStateError
 from rconx.common.protocol import LENGTH_HEADER, MIN_PACKET_BODY_SIZE
@@ -27,7 +28,19 @@ _INT32_MAX = (1 << 31) - 1
 _ClientMethod = TypeVar('_ClientMethod', bound=Callable[..., Any])
 
 
-class _RconClientInitOptions(RconClientOptions):
+class _RconBaseClientOptions(ConnectionOptions):
+	"""
+	Optional high-level client keyword arguments, including the fields of ``ConnectionOptions``
+	"""
+
+	default_encoding: NotRequired[str]
+	"""Text encoding for string input and response text; defaults to ``utf8``"""
+
+	max_response_size: NotRequired[Optional[int]]
+	"""Maximum accumulated response payload size in bytes, with a default of 4 MiB. ``None`` disables the limit"""
+
+
+class _RconClientInitOptions(_RconBaseClientOptions):
 	authentication_handler: AuthenticationHandler
 	command_handler: CommandHandler
 
@@ -56,7 +69,7 @@ class _RconClientConfig(ConnectionConfig):
 
 
 class _BaseRconClient:
-	def __init__(self, *, authentication_handler: AuthenticationHandler, command_handler: CommandHandler, **kwargs: Unpack[RconClientOptions]):
+	def __init__(self, *, authentication_handler: AuthenticationHandler, command_handler: CommandHandler, **kwargs: Unpack[_RconBaseClientOptions]):
 		self._config = _RconClientConfig(**kwargs)
 
 		if not isinstance(authentication_handler, AuthenticationHandler):
@@ -104,13 +117,28 @@ class _BaseRconClient:
 		return _RconHandlers(SourceAuthenticationHandler(), command_handler)
 
 	@staticmethod
-	def _apply_preset_defaults(preset: RconPreset, options: RconClientOptions):
+	def _apply_preset_defaults(preset: RconPreset, options: _RconBaseClientOptions):
 		if preset == RconPreset.minecraft:
 			# Minecraft reads each complete request into a 1460-byte buffer.
 			options.setdefault('max_send_packet_size', 1460)
 		elif preset == RconPreset.cuberite:
 			# Cuberite allows a 1500-byte packet body plus the 4-byte length header.
 			options.setdefault('max_send_packet_size', 1504)
+
+	@classmethod
+	def _prepare_init_options(cls, options: RconClientOptions) -> _RconClientInitOptions:
+		resolved_preset = cls._resolve_preset(options['preset'])
+		handlers = cls._create_handlers(resolved_preset)
+		config_options = dict(options)
+		config_options.pop('preset')
+		client_options = cast(_RconBaseClientOptions, config_options)
+		cls._apply_preset_defaults(resolved_preset, client_options)
+
+		return _RconClientInitOptions(
+			authentication_handler=handlers.authentication_handler,
+			command_handler=handlers.command_handler,
+			**client_options,
+		)
 
 	@property
 	def connected(self) -> bool:
@@ -220,7 +248,7 @@ class RconClient(_BaseRconClient):
 
 	@classmethod
 	def create(
-		cls, host: str, port: int, preset: Union[RconPreset, RconPresetLiteral],
+		cls, host: str, port: int,
 		**kwargs: Unpack[RconClientOptions],
 	) -> 'RconClient':
 		"""
@@ -232,16 +260,7 @@ class RconClient(_BaseRconClient):
 		:param kwargs: Encoding and size options from ``RconClientOptions`` that override preset defaults
 		:return: A disconnected client
 		"""
-		resolved_preset = cls._resolve_preset(preset)
-		handlers = cls._create_handlers(resolved_preset)
-		cls._apply_preset_defaults(resolved_preset, kwargs)
-
-		return cls(
-			host, port,
-			authentication_handler=handlers.authentication_handler,
-			command_handler=handlers.command_handler,
-			**kwargs,
-		)
+		return cls(host, port, **cls._prepare_init_options(kwargs))
 
 	@_exclusive_operation
 	def connect(self, *, timeout: Optional[float] = None, local_address: Optional[LocalAddress] = None):
@@ -363,7 +382,7 @@ class AsyncRconClient(_BaseRconClient):
 
 	@classmethod
 	def create(
-		cls, host: str, port: int, preset: Union[RconPreset, RconPresetLiteral],
+		cls, host: str, port: int,
 		**kwargs: Unpack[RconClientOptions],
 	) -> 'AsyncRconClient':
 		"""
@@ -375,16 +394,7 @@ class AsyncRconClient(_BaseRconClient):
 		:param kwargs: Encoding and size options from ``RconClientOptions`` that override preset defaults
 		:return: A disconnected client
 		"""
-		resolved_preset = cls._resolve_preset(preset)
-		handlers = cls._create_handlers(resolved_preset)
-		cls._apply_preset_defaults(resolved_preset, kwargs)
-
-		return cls(
-			host, port,
-			authentication_handler=handlers.authentication_handler,
-			command_handler=handlers.command_handler,
-			**kwargs,
-		)
+		return cls(host, port, **cls._prepare_init_options(kwargs))
 
 	@_exclusive_operation
 	async def connect(self, *, local_address: Optional[LocalAddress] = None):

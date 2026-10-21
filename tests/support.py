@@ -8,10 +8,9 @@ from collections import deque
 from typing import Any, Callable, Coroutine, Deque, Iterable, List, NoReturn, Optional, Tuple, TypeVar, Union, cast
 
 import select
-from typing_extensions import Protocol, SupportsIndex, Unpack
+from typing_extensions import NotRequired, Protocol, SupportsIndex, TypedDict, Unpack
 
 from rconx.client.client import AsyncRconClient, RconClient
-from rconx.client.client_options import RconClientOptions
 from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.client.raw import AsyncRawRconClient
 from rconx.common.connection import AsyncConnection, DEFAULT_MAX_RECEIVE_PACKET_SIZE
@@ -540,11 +539,18 @@ class AsyncRconEndpoint:
 		return self.writers[-1]
 
 
+class RconFactoryOptions(TypedDict):
+	max_send_packet_size: NotRequired[Optional[int]]
+	max_receive_packet_size: NotRequired[Optional[int]]
+	default_encoding: NotRequired[str]
+	max_response_size: NotRequired[Optional[int]]
+
+
 class SyncRconFactory(Protocol):
-	def __call__(self, preset: Union[RconPreset, RconPresetLiteral] = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> SyncRconEndpoint:
+	def __call__(self, preset: Union[RconPreset, RconPresetLiteral] = RconPreset.single_packet, **kwargs: Unpack[RconFactoryOptions]) -> SyncRconEndpoint:
 		...
 
 
 class AsyncRconFactory(Protocol):
-	def __call__(self, preset: Union[RconPreset, RconPresetLiteral] = RconPreset.single_packet, **kwargs: Unpack[RconClientOptions]) -> AsyncRconEndpoint:
+	def __call__(self, preset: Union[RconPreset, RconPresetLiteral] = RconPreset.single_packet, **kwargs: Unpack[RconFactoryOptions]) -> AsyncRconEndpoint:
 		...

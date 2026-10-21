@@ -38,7 +38,8 @@ def test_zero_commands_checks_connection_and_authentication(
 	monkeypatch.setattr(sys, 'stdin', stdin)
 	main()
 	assert create_client.call_count == 1
-	assert create_client.call_args[0] == ('localhost', 25575, RconPreset.minecraft)
+	assert create_client.call_args[0] == ('localhost', 25575)
+	assert create_client.call_args[1]['preset'] == RconPreset.minecraft
 	for option in ('default_encoding', 'max_send_packet_size', 'max_receive_packet_size', 'max_response_size'):
 		assert option not in create_client.call_args[1]
 	assert client.mock_calls == [
@@ -80,8 +81,9 @@ def test_explicit_client_configuration(client: MagicMock, create_client: Mock, m
 	])
 	main()
 	assert create_client.call_count == 1
-	assert create_client.call_args[0] == ('::1', 12345, RconPreset.srcds)
+	assert create_client.call_args[0] == ('::1', 12345)
 	options = create_client.call_args[1]
+	assert options['preset'] == RconPreset.srcds
 	assert options['default_encoding'] == 'latin1'
 	assert options['max_send_packet_size'] == 101
 	assert options['max_receive_packet_size'] == 202

@@ -4,11 +4,10 @@ from typing import Any, List, Optional, Tuple, Type, Union
 import pytest
 
 from rconx.client.client import AsyncRconClient
-from rconx.client.client_options import RconClientOptions
 from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.common.exceptions import RconAuthenticationError, RconConnectionError, RconProtocolError, RconSizeLimitError, RconStateError
 from rconx.common.protocol import PacketType
-from tests.support import AsyncRconFactory, PacketReply, RconPeer, RunAsync, TcpListenerFactory, read_async_packet
+from tests.support import AsyncRconFactory, PacketReply, RconFactoryOptions, RconPeer, RunAsync, TcpListenerFactory, read_async_packet
 
 
 @pytest.mark.parametrize('active', ['connect', 'authenticate', 'execute', 'aclose'])
@@ -181,7 +180,7 @@ def test_context_cleanup_preserves_body_exception(run_async: RunAsync, async_rco
 @pytest.mark.parametrize('unlimited', [False, True])
 def test_default_aggregate_response_limit(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, unlimited: bool):
 	async def scenario():
-		options: RconClientOptions = {'max_response_size': None} if unlimited else {}
+		options: RconFactoryOptions = {'max_response_size': None} if unlimited else {}
 		endpoint = async_rcon_factory(RconPreset.srcds, **options)
 		endpoint.peer.output = [b'x' * (2 * 1024 * 1024), b'y' * (2 * 1024 * 1024)]
 		await endpoint.client.connect()
@@ -201,7 +200,7 @@ def test_default_aggregate_response_limit(run_async: RunAsync, async_rcon_factor
 @pytest.mark.parametrize('unlimited', [False, True])
 def test_default_receive_packet_limit(run_async: RunAsync, async_rcon_factory: AsyncRconFactory, unlimited: bool):
 	async def scenario():
-		options: RconClientOptions = {'max_response_size': None}
+		options: RconFactoryOptions = {'max_response_size': None}
 		if unlimited:
 			options['max_receive_packet_size'] = None
 		endpoint = async_rcon_factory(**options)
@@ -266,7 +265,7 @@ def test_failed_connect_allows_retry(run_async: RunAsync, async_rcon_factory: As
 def test_tcp_preset_exchange(run_async: RunAsync, tcp_listener_factory: TcpListenerFactory, preset: RconPreset):
 	async def scenario():
 		listener = tcp_listener_factory()
-		client = AsyncRconClient.create(listener.address.host, listener.address.port, preset)
+		client = AsyncRconClient.create(listener.address.host, listener.address.port, preset=preset)
 		model = RconPeer(preset)
 
 		async def serve():

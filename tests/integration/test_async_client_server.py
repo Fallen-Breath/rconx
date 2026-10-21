@@ -31,7 +31,7 @@ def test_complete_session(run_server: _RunServer, run_async: RunAsync, asynchron
 
 	with run_server(server) as address:
 		async def scenario():
-			async with AsyncRconClient.create(address.host, address.port, RconPreset.srcds) as client:
+			async with AsyncRconClient.create(address.host, address.port, preset=RconPreset.srcds) as client:
 				await client.connect()
 				await client.authenticate('password')
 				assert client.authenticated
@@ -63,7 +63,7 @@ def test_non_default_encoding(run_server: _RunServer, run_async: RunAsync):
 	server = AsyncRconServer('127.0.0.1', 0, authentication=authenticate, command_handler=handle, default_encoding='latin-1')
 	with run_server(server) as address:
 		async def scenario():
-			async with AsyncRconClient.create(address.host, address.port, RconPreset.srcds, default_encoding='latin-1') as client:
+			async with AsyncRconClient.create(address.host, address.port, preset=RconPreset.srcds, default_encoding='latin-1') as client:
 				await client.connect()
 				await client.authenticate('s\xe9cret')
 				response = await client.execute('caf\xe9')
@@ -85,7 +85,7 @@ def test_authentication_rejection_allows_reconnect(run_server: _RunServer, run_a
 	server = AsyncRconServer('127.0.0.1', 0, authentication='password', command_handler=handle)
 	with run_server(server) as address:
 		async def scenario():
-			async with AsyncRconClient.create(address.host, address.port, RconPreset.srcds) as client:
+			async with AsyncRconClient.create(address.host, address.port, preset=RconPreset.srcds) as client:
 				await client.connect()
 				with pytest.raises(RconAuthenticationError):
 					await client.authenticate('wrong')
@@ -107,8 +107,8 @@ def test_callback_failure_only_ends_current_session(run_server: _RunServer, run_
 	server = AsyncRconServer('127.0.0.1', 0, authentication='password', command_handler=handle)
 	with run_server(server) as address:
 		async def scenario():
-			async with AsyncRconClient.create(address.host, address.port, RconPreset.srcds) as failing:
-				async with AsyncRconClient.create(address.host, address.port, RconPreset.srcds) as healthy:
+			async with AsyncRconClient.create(address.host, address.port, preset=RconPreset.srcds) as failing:
+				async with AsyncRconClient.create(address.host, address.port, preset=RconPreset.srcds) as healthy:
 					await failing.connect()
 					await failing.authenticate('password')
 					await healthy.connect()

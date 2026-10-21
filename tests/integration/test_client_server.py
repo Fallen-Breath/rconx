@@ -28,7 +28,7 @@ def test_complete_session(run_server: _RunServer, asynchronous_server: bool):
 		server = RconServer('127.0.0.1', 0, authentication='password', command_handler=command)
 
 	with run_server(server) as address:
-		with RconClient.create(address.host, address.port, RconPreset.srcds) as client:
+		with RconClient.create(address.host, address.port, preset=RconPreset.srcds) as client:
 			client.connect(timeout=2)
 			client.authenticate('password', timeout=2)
 			assert client.connected and client.authenticated
@@ -52,7 +52,7 @@ def test_non_default_encoding(run_server: _RunServer):
 
 	server = RconServer('127.0.0.1', 0, authentication=authenticate, command_handler=command, default_encoding='latin1')
 	with run_server(server) as address:
-		with RconClient.create(address.host, address.port, RconPreset.srcds, default_encoding='latin1') as client:
+		with RconClient.create(address.host, address.port, preset=RconPreset.srcds, default_encoding='latin1') as client:
 			client.connect(timeout=2)
 			client.authenticate('s\xe9same', timeout=2)
 			text_response = client.execute('caf\xe9', timeout=2)
@@ -73,7 +73,7 @@ def test_authentication_rejection_allows_reconnect(run_server: _RunServer):
 
 	server = RconServer('127.0.0.1', 0, authentication=b'password', command_handler=command)
 	with run_server(server) as address:
-		with RconClient.create(address.host, address.port, RconPreset.srcds) as client:
+		with RconClient.create(address.host, address.port, preset=RconPreset.srcds) as client:
 			client.connect(timeout=2)
 			with pytest.raises(RconAuthenticationError):
 				client.authenticate('wrong', timeout=2)
@@ -92,7 +92,7 @@ def test_callback_failure_only_ends_current_session(run_server: _RunServer):
 
 	server = RconServer('127.0.0.1', 0, authentication='password', command_handler=command)
 	with run_server(server) as address:
-		with RconClient.create(address.host, address.port, RconPreset.srcds) as good, RconClient.create(address.host, address.port, RconPreset.srcds) as bad:
+		with RconClient.create(address.host, address.port, preset=RconPreset.srcds) as good, RconClient.create(address.host, address.port, preset=RconPreset.srcds) as bad:
 			good.connect(timeout=2)
 			good.authenticate('password', timeout=2)
 			bad.connect(timeout=2)

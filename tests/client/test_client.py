@@ -6,11 +6,10 @@ from typing import Any, List, Optional, Type, Union
 import pytest
 
 from rconx.client.client import AsyncRconClient, RconClient
-from rconx.client.client_options import RconClientOptions
 from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.common.exceptions import RconAuthenticationError, RconConnectionError, RconProtocolError, RconSizeLimitError, RconStateError, RconTimeoutError
 from rconx.common.protocol import PacketType
-from tests.support import Clock, PacketReply, RconPeer, SyncRconFactory, TcpListenerFactory, read_packet
+from tests.support import Clock, PacketReply, RconFactoryOptions, RconPeer, SyncRconFactory, TcpListenerFactory, read_packet
 
 
 def test_context_cleanup_preserves_body_exception(rcon_factory: SyncRconFactory):
@@ -28,7 +27,7 @@ def test_context_cleanup_preserves_body_exception(rcon_factory: SyncRconFactory)
 @pytest.mark.parametrize('preset', list(RconPreset))
 def test_tcp_preset_exchange(tcp_listener_factory: TcpListenerFactory, preset: RconPreset):
 	listener = tcp_listener_factory()
-	client = RconClient.create(listener.address.host, listener.address.port, preset)
+	client = RconClient.create(listener.address.host, listener.address.port, preset=preset)
 	model = RconPeer(preset)
 
 	def serve():
@@ -333,7 +332,7 @@ def test_receive_packet_limit_closes_session(rcon_factory: SyncRconFactory):
 
 @pytest.mark.parametrize('unlimited', [False, True])
 def test_default_aggregate_response_limit(rcon_factory: SyncRconFactory, unlimited: bool):
-	options: RconClientOptions = {'max_response_size': None} if unlimited else {}
+	options: RconFactoryOptions = {'max_response_size': None} if unlimited else {}
 	endpoint = rcon_factory(RconPreset.srcds, **options)
 	endpoint.peer.output = [b'x' * (2 * 1024 * 1024), b'y' * (2 * 1024 * 1024)]
 	endpoint.client.connect()
@@ -350,7 +349,7 @@ def test_default_aggregate_response_limit(rcon_factory: SyncRconFactory, unlimit
 
 @pytest.mark.parametrize('unlimited', [False, True])
 def test_default_receive_packet_limit(rcon_factory: SyncRconFactory, unlimited: bool):
-	options: RconClientOptions = {'max_response_size': None}
+	options: RconFactoryOptions = {'max_response_size': None}
 	if unlimited:
 		options['max_receive_packet_size'] = None
 	endpoint = rcon_factory(**options)
@@ -572,9 +571,9 @@ def test_guard_covers_failure_cleanup(rcon_factory: SyncRconFactory):
 	pytest.param({'max_response_size': -1}, ValueError, id='negative-result'),
 	pytest.param({'max_response_size': True}, TypeError, id='boolean-result'),
 ])
-def test_invalid_configuration(client_type: Union[Type[RconClient], Type[AsyncRconClient]], options: RconClientOptions, error: Type[BaseException]):
+def test_invalid_configuration(client_type: Union[Type[RconClient], Type[AsyncRconClient]], options: RconFactoryOptions, error: Type[BaseException]):
 	with pytest.raises(error):
-		client_type.create('localhost', 1, RconPreset.single_packet, **options)
+		client_type.create('localhost', 1, preset=RconPreset.single_packet, **options)
 
 
 @pytest.mark.parametrize('client_type', [RconClient, AsyncRconClient])
@@ -590,4 +589,4 @@ def test_invalid_configuration(client_type: Union[Type[RconClient], Type[AsyncRc
 ])
 def test_invalid_preset(client_type: Union[Type[RconClient], Type[AsyncRconClient]], preset: Any, error: Type[BaseException]):
 	with pytest.raises(error):
-		client_type.create('localhost', 1, preset)
+		client_type.create('localhost', 1, preset=preset)

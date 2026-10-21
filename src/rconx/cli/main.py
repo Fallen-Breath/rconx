@@ -14,7 +14,7 @@ def main():
 
 
 def __create_client(options: CliOptions) -> RconClient:
-	client_options: RconClientOptions = {}
+	client_options: RconClientOptions = {'preset': options.preset}
 	if options.encoding is not None:
 		client_options['default_encoding'] = options.encoding
 	if options.max_send_packet_size is not None:
@@ -24,7 +24,7 @@ def __create_client(options: CliOptions) -> RconClient:
 	if options.max_response_size is not None:
 		client_options['max_response_size'] = options.max_response_size.value
 	return RconClient.create(
-		options.address.host, options.address.port, options.preset,
+		options.address.host, options.address.port,
 		**client_options,
 	)
 

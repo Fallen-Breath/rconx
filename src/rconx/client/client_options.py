@@ -1,14 +1,18 @@
-from typing import Optional
+from typing import Optional, Union
 
-from typing_extensions import NotRequired
+from typing_extensions import NotRequired, TypedDict
 
-from rconx.common.connection_options import ConnectionOptions
+from rconx.client.preset import RconPreset, RconPresetLiteral
 
 
-class RconClientOptions(ConnectionOptions):
-	"""
-	Optional high-level client keyword arguments, including the fields of ``ConnectionOptions``
-	"""
+class RconClientOptions(TypedDict):
+	preset: Union[RconPreset, RconPresetLiteral]
+
+	max_send_packet_size: NotRequired[Optional[int]]
+	"""Maximum sent packet size in bytes, including the length header. ``None`` disables the limit"""
+
+	max_receive_packet_size: NotRequired[Optional[int]]
+	"""Maximum received packet size in bytes, including the length header (default: 4 MiB). ``None`` disables the limit"""
 
 	default_encoding: NotRequired[str]
 	"""Text encoding for string input and response text; defaults to ``utf8``"""

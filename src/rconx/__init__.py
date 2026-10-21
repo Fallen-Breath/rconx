@@ -2,6 +2,8 @@ from rconx.client.client import AsyncRconClient, RconClient
 from rconx.client.client_options import RconClientOptions
 from rconx.client.preset import RconPreset, RconPresetLiteral
 from rconx.client.raw import AsyncRawRconClient, LocalAddress, RawRconClient
+from rconx.client.shortcut_options import AsyncRconExecuteOptions, SyncRconExecuteOptions
+from rconx.client.shortcuts import execute, execute_async
 from rconx.common.connection import AsyncConnection, Connection
 from rconx.common.connection_info import ConnectionAddress, ConnectionInfo
 from rconx.common.connection_options import ConnectionOptions
@@ -30,6 +32,12 @@ __all__ = [
 	'RconPreset',
 	'RconPresetLiteral',
 	'RconClientOptions',
+
+	# Client shortcuts
+	'execute',
+	'execute_async',
+	'SyncRconExecuteOptions',
+	'AsyncRconExecuteOptions',
 
 	# Low-level clients
 	'RawRconClient',

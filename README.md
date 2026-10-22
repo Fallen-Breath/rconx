@@ -49,6 +49,20 @@ async def main():
 asyncio.run(main())
 ```
 
+### CLI
+
+Install the `rconx` console command with pip:
+
+```sh
+python -m pip install "rconx[cli]"
+```
+
+Execute `list` using default CLI preset (minecraft) with password from the environment variable:
+
+```sh
+RCONX_PASSWORD='MY_PASSWORD' rconx 127.0.0.1:25575 list
+```
+
 ## Documentation
 
 - The [client guide](https://github.com/Fallen-Breath/rconx/blob/master/docs/client.md) describes client usage, presets, command results, and error handling. It also records compatibility and testing status for individual servers.

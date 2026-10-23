@@ -4,17 +4,16 @@ The rconx command-line interface executes commands on an RCON server from a term
 
 ## Installation and invocation
 
-The `cli` extra installs the `rconx` console command:
+| Method           | Installation                         | Show help                                |
+|------------------|--------------------------------------|------------------------------------------|
+| pip              | `python -m pip install "rconx[cli]"` | `rconx --help`                           |
+| pipx             | `pipx install rconx_cli`             | `rconx --help`                           |
+| pipx (temporary) | -                                    | `pipx run --spec rconx_cli rconx --help` |
+| uv               | `uv tool install rconx_cli`          | `rconx --help`                           |
+| uv (temporary)   | -                                    | `uvx --from rconx_cli rconx --help`      |
+| Python module    | `python -m pip install rconx`        | `python -m rconx --help`                 |
 
-```sh
-python -m pip install "rconx[cli]"
-```
-
-The base `rconx` package also provides `python -m rconx`, which accepts the same arguments:
-
-```sh
-python -m rconx --help
-```
+All invocation methods accept the same arguments. The examples below use `rconx`.
 
 ## Running commands
 

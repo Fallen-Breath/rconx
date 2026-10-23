@@ -57,6 +57,8 @@ Install the `rconx` console command with pip:
 python -m pip install "rconx[cli]"
 ```
 
+For pipx, uv, and temporary invocation, see the [command-line guide](https://github.com/Fallen-Breath/rconx/blob/master/docs/cli.md#installation-and-invocation).
+
 Execute `list` using default CLI preset (minecraft) with password from the environment variable:
 
 ```sh

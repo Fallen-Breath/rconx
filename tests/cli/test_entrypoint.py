@@ -26,6 +26,36 @@ def run_python(arguments: List[str], directory: Path) -> 'subprocess.CompletedPr
 	)
 
 
+def test_module_without_arguments_shows_help(tmp_path: Path):
+	result = run_python(['-m', 'rconx'], tmp_path)
+	output = result.stdout + result.stderr
+	assert 'HOST:PORT' in output
+	assert '--password' in output
+	assert '--interactive' in output
+	assert 'Traceback (most recent call last)' not in output
+
+
+@pytest.mark.parametrize('arguments', [
+	pytest.param(['-p', 'secret'], id='missing-address'),
+	pytest.param(['-p', 'secret', 'localhost:0'], id='invalid-address'),
+	pytest.param(['--timeout=nan', '-p', 'secret', 'localhost:25575'], id='invalid-timeout'),
+	pytest.param(['--max-response-size=-1', '-p', 'secret', 'localhost:25575'], id='invalid-size-limit'),
+	pytest.param(['--encoding=unknown-encoding', '-p', 'secret', 'localhost:25575'], id='unknown-encoding'),
+	pytest.param(['--encoding=', '-p', 'secret', 'localhost:25575'], id='empty-encoding'),
+	pytest.param(['--encoding=base64_codec', '-p', 'secret', 'localhost:25575'], id='non-text-encoding'),
+	pytest.param(['localhost:25575'], id='missing-default-password'),
+	pytest.param(['--password-env', 'RCONX_CLI_TEST_MISSING_PASSWORD', 'localhost:25575'], id='missing-named-password'),
+	pytest.param(['--password-file', 'missing-password.bin', 'localhost:25575'], id='missing-password-file'),
+])
+def test_module_reports_input_errors_without_traceback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arguments: List[str]):
+	monkeypatch.delenv('RCONX_CLI_TEST_MISSING_PASSWORD', raising=False)
+	result = run_python(['-m', 'rconx'] + arguments, tmp_path)
+	assert result.returncode != 0
+	assert result.stdout == ''
+	assert result.stderr.strip()
+	assert 'Traceback (most recent call last)' not in result.stderr
+
+
 @pytest.mark.parametrize('option', ['-h', '--help'])
 def test_module_help_needs_no_connection_arguments(tmp_path: Path, option: str):
 	result = run_python(['-m', 'rconx', option], tmp_path)

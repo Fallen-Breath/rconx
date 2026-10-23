@@ -13,7 +13,7 @@ The rconx command-line interface executes commands on an RCON server from a term
 | uv (temporary)   | -                                    | `uvx --from rconx_cli rconx --help`      |
 | Python module    | `python -m pip install rconx`        | `python -m rconx --help`                 |
 
-All invocation methods accept the same arguments. The examples below use `rconx`.
+All invocation methods accept the same arguments. Running without arguments displays help. The examples below use `rconx`.
 
 ## Running commands
 

@@ -1,4 +1,5 @@
 import argparse
+import codecs
 import dataclasses
 import os
 import sys
@@ -71,13 +72,35 @@ def seconds(value: str) -> float:
 
 
 def timeout(value: str) -> Optional[float]:
-	return None if value == 'none' else seconds(value)
+	if value == 'none':
+		return None
+	try:
+		return seconds(value)
+	except ValueError as err:
+		raise argparse.ArgumentTypeError("expected a finite non-negative number of seconds or 'none'; got {!r}".format(value)) from err
 
 
 def size_limit(value: str) -> SizeLimit:
-	size = None if value == 'none' else int(value)
-	validate_packet_size_limit(size, 'size limit')
+	try:
+		size = None if value == 'none' else int(value)
+		validate_packet_size_limit(size, 'size limit')
+	except ValueError as err:
+		raise argparse.ArgumentTypeError("expected a non-negative integer number of bytes or 'none'; got {!r}".format(value)) from err
 	return SizeLimit(size)
+
+
+def text_encoding(value: str) -> str:
+	if not value:
+		raise argparse.ArgumentTypeError('text encoding name must not be empty')
+	try:
+		codecs.lookup(value)
+	except LookupError as err:
+		raise argparse.ArgumentTypeError('unknown text encoding {!r}'.format(value)) from err
+	try:
+		''.encode(value)
+	except LookupError as err:
+		raise argparse.ArgumentTypeError('{!r} is not a text encoding'.format(value)) from err
+	return value
 
 
 def parse_args() -> CliOptions:
@@ -93,32 +116,50 @@ def parse_args() -> CliOptions:
 	password_source.add_argument('--password-env', metavar='NAME', help='read the password from environment variable NAME (default source: RCONX_PASSWORD)')
 	password_source.add_argument('--password-file', metavar='PATH', help='read the complete password bytes from file PATH')
 	parser.add_argument('-P', '--preset', choices=[preset.name for preset in RconPreset], default='minecraft', help='RCON exchange preset (default: %(default)s)')
-	parser.add_argument('-i', '--interactive', action='store_true', help='read commands interactively after the startup commands')
+	output_mode = parser.add_mutually_exclusive_group()
+	output_mode.add_argument('-i', '--interactive', action='store_true', help='read commands interactively after the startup commands')
 	parser.add_argument('-t', '--timeout', type=timeout, default=10.0, metavar='SECONDS|none', help='timeout for each connect, authentication or command operation (default: 10 seconds)')
-	parser.add_argument('--encoding', metavar='NAME', help='text password, command and response encoding (default: core utf8)')
-	parser.add_argument('--raw', action='store_true', help='write response bytes; incompatible with -i')
+	parser.add_argument('--encoding', type=text_encoding, metavar='NAME', help='text password, command and response encoding (default: core utf8)')
+	output_mode.add_argument('--raw', action='store_true', help='write response bytes; incompatible with -i')
 	parser.add_argument('--max-send-packet-size', type=size_limit, metavar='BYTES|none', help='send packet size limit; none disables it (default: selected preset)')
 	parser.add_argument('--max-receive-packet-size', type=size_limit, metavar='BYTES|none', help='receive packet size limit; none disables it (default: core limit)')
 	parser.add_argument('--max-response-size', type=size_limit, metavar='BYTES|none', help='accumulated response size limit; none disables it (default: core limit)')
 	parser.add_argument('--version', action='version', version='%(prog)s {}'.format(__get_self_version()))
 	parser.add_argument('items', nargs=argparse.REMAINDER, metavar='HOST:PORT [COMMAND ...]', help='target address followed by zero or more complete command strings')
+	if len(sys.argv) == 1:
+		parser.print_help(file=sys.stderr)
+		parser.exit(2)
 	arguments = parser.parse_args()
 
 	if not arguments.items:
-		raise ValueError('HOST:PORT is required')
-	if arguments.raw and arguments.interactive:
-		raise ValueError('--raw cannot be combined with --interactive')
+		parser.error('HOST:PORT is required')
+	try:
+		address = compute_address(arguments.items[0])
+	except ValueError as err:
+		parser.error('invalid address: {}'.format(err))
 	password: Union[str, bytes]
 	if arguments.password is not None:
 		password = arguments.password
 	elif arguments.password_file is not None:
-		password = Path(arguments.password_file).read_bytes()
+		if not arguments.password_file:
+			parser.error('--password-file: file path must not be empty')
+		try:
+			password = Path(arguments.password_file).read_bytes()
+		except OSError as err:
+			parser.error('--password-file: cannot read {!r}: {}'.format(arguments.password_file, err.strerror))
 	else:
 		password_env = arguments.password_env if arguments.password_env is not None else 'RCONX_PASSWORD'
-		password = os.environ[password_env]
+		if not password_env:
+			parser.error('--password-env: environment variable name must not be empty')
+		try:
+			password = os.environ[password_env]
+		except KeyError:
+			if arguments.password_env is not None:
+				parser.error('--password-env: environment variable {!r} is not set'.format(password_env))
+			parser.error("password environment variable 'RCONX_PASSWORD' is not set; set it or specify --password, --password-env or --password-file")
 
 	return CliOptions(
-		address=compute_address(arguments.items[0]),
+		address=address,
 		password=password,
 		commands=arguments.items[1:],
 		preset=RconPreset[arguments.preset],

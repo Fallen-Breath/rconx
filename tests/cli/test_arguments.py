@@ -98,8 +98,9 @@ def test_password_from_default_environment_variable(monkeypatch: pytest.MonkeyPa
 def test_missing_default_password_environment_variable_fails(monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.delenv('RCONX_PASSWORD', raising=False)
 	monkeypatch.setattr(sys, 'argv', ['rconx', 'localhost:25575'])
-	with pytest.raises(Exception):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 @pytest.mark.parametrize('password', [
@@ -118,8 +119,9 @@ def test_password_sources_are_mutually_exclusive(monkeypatch: pytest.MonkeyPatch
 	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.setenv('RCONX_TEST_PASSWORD', 'environment secret')
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--password-env', 'RCONX_TEST_PASSWORD', 'localhost:25575'])
-	with pytest.raises((Exception, SystemExit)):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 @pytest.mark.parametrize('other_option, other_value', [
@@ -132,30 +134,34 @@ def test_password_file_is_mutually_exclusive_with_other_sources(monkeypatch: pyt
 	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.setenv('RCONX_TEST_PASSWORD', 'environment secret')
 	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-file', str(password_file), other_option, other_value, 'localhost:25575'])
-	with pytest.raises((Exception, SystemExit)):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 def test_password_file_option_requires_a_path(monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-file', '--timeout', '1', 'localhost:25575'])
-	with pytest.raises((Exception, SystemExit)):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 def test_missing_password_file_does_not_fall_back_to_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-file', str(tmp_path / 'missing-password.bin'), 'localhost:25575'])
-	with pytest.raises((Exception, SystemExit)):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 def test_undefined_password_environment_variable_fails(monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.setenv('RCONX_PASSWORD', 'default secret')
 	monkeypatch.delenv('RCONX_TEST_PASSWORD', raising=False)
 	monkeypatch.setattr(sys, 'argv', ['rconx', '--password-env', 'RCONX_TEST_PASSWORD', 'localhost:25575'])
-	with pytest.raises(Exception):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 def test_password_environment_option_requires_a_name(monkeypatch: pytest.MonkeyPatch):
@@ -168,8 +174,9 @@ def test_password_environment_option_requires_a_name(monkeypatch: pytest.MonkeyP
 
 def test_address_is_required(monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret'])
-	with pytest.raises(Exception):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 @pytest.mark.parametrize('address, host, port', [
@@ -197,8 +204,9 @@ def test_address_formats(monkeypatch: pytest.MonkeyPatch, address: str, host: st
 ])
 def test_invalid_address_is_rejected(monkeypatch: pytest.MonkeyPatch, address: str):
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', address])
-	with pytest.raises(Exception):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 @pytest.mark.parametrize('preset', [RconPreset.minecraft, RconPreset.srcds, RconPreset.cuberite, RconPreset.single_packet])
@@ -223,8 +231,9 @@ def test_raw_and_encoding_options(monkeypatch: pytest.MonkeyPatch):
 
 def test_raw_and_interactive_are_mutually_exclusive(monkeypatch: pytest.MonkeyPatch):
 	monkeypatch.setattr(sys, 'argv', ['rconx', '-p', 'secret', '--raw', '--interactive', 'localhost:25575'])
-	with pytest.raises(Exception):
+	with pytest.raises(SystemExit) as caught:
 		parse_args()
+	assert caught.value.code != 0
 
 
 @pytest.mark.parametrize('value, expected', [
